@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}SIRIUS Canvas - Legal Structure Designer{% endblock %}
+
+{% block content %}
+<div id="app">
+    <!-- Vue.js will mount here and handle all content -->
+</div>
+
+<!-- Pass Django data to Vue.js -->
+<script>
+    window.djangoData = {
+        csrfToken: '{{ csrf_token }}',
+        apiUrls: {
+            estruturas: '{% url "estruturas_app:estruturas_json" %}',
+            templates: '{% url "estruturas_app:templates_json" %}',
+            validar: '{% url "estruturas_app:validar_configuracao" %}',
+            salvarTemplate: '{% url "estruturas_app:salvar_template" %}',
+            salvarConfiguracao: '{% url "estruturas_app:salvar_configuracao" %}'
+        }
+    };
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/sirius-app.js' %}"></script>
+{% endblock %}
+

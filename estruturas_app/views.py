@@ -30,7 +30,7 @@ def canvas_principal(request):
         'page_title': 'SIRIUS - Legal Structure Canvas'
     }
     
-    return render(request, 'canvas.html', context)
+    return render(request, 'canvas_vue.html', context)
 
 
 def estruturas_json(request):
