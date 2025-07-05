@@ -106,6 +106,48 @@ const SiriusApp = {
                             </button>
                             
                             <button 
+                                @click="undoAction"
+                                class="btn-secondary"
+                                title="Undo (Ctrl+Z)"
+                            >
+                                <i class="fas fa-undo"></i>
+                            </button>
+                            
+                            <button 
+                                @click="redoAction"
+                                class="btn-secondary"
+                                title="Redo (Ctrl+Y)"
+                            >
+                                <i class="fas fa-redo"></i>
+                            </button>
+                            
+                            <button 
+                                @click="toggleGridSnap"
+                                class="btn-secondary"
+                                :class="{ 'bg-sirius-blue text-white': snapToGrid }"
+                                title="Toggle Grid Snap (G)"
+                            >
+                                <i class="fas fa-th"></i>
+                            </button>
+                            
+                            <button 
+                                @click="fitCanvasToContent"
+                                class="btn-secondary"
+                                :disabled="elementos.length === 0"
+                                title="Fit to Content"
+                            >
+                                <i class="fas fa-expand-arrows-alt"></i>
+                            </button>
+                            
+                            <button 
+                                @click="resetCanvasView"
+                                class="btn-secondary"
+                                title="Reset View"
+                            >
+                                <i class="fas fa-home"></i>
+                            </button>
+                            
+                            <button 
                                 @click="salvarTemplate"
                                 class="btn-primary"
                                 :disabled="elementos.length === 0"
@@ -368,7 +410,12 @@ const SiriusApp = {
             
             // Costs and timing
             custoTotal: 0,
-            tempoTotal: 0
+            tempoTotal: 0,
+            
+            // Advanced canvas features
+            advancedCanvas: null,
+            showGrid: true,
+            snapToGrid: true
         }
     },
     
@@ -406,6 +453,13 @@ const SiriusApp = {
     
     mounted() {
         this.initializeApp();
+        
+        // Initialize advanced canvas features
+        this.$nextTick(() => {
+            if (window.SiriusCanvasAdvanced) {
+                this.advancedCanvas = new window.SiriusCanvasAdvanced(this);
+            }
+        });
     },
     
     methods: {
@@ -758,7 +812,59 @@ const SiriusApp = {
                     sugestoes: []
                 };
                 
+                if (this.advancedCanvas) {
+                    this.advancedCanvas.saveState();
+                }
+                
                 this.showNotification('Canvas cleared', 'info');
+            }
+        },
+        
+        // Advanced Canvas Controls
+        resetCanvasView() {
+            if (this.advancedCanvas) {
+                this.advancedCanvas.resetView();
+            }
+        },
+        
+        fitCanvasToContent() {
+            if (this.advancedCanvas) {
+                this.advancedCanvas.fitToContent();
+            }
+        },
+        
+        toggleGridSnap() {
+            this.snapToGrid = !this.snapToGrid;
+            if (this.advancedCanvas) {
+                this.advancedCanvas.snapToGrid = this.snapToGrid;
+            }
+            this.showNotification(
+                `Grid snap ${this.snapToGrid ? 'enabled' : 'disabled'}`,
+                'info'
+            );
+        },
+        
+        undoAction() {
+            if (this.advancedCanvas) {
+                this.advancedCanvas.undo();
+            }
+        },
+        
+        redoAction() {
+            if (this.advancedCanvas) {
+                this.advancedCanvas.redo();
+            }
+        },
+        
+        createConnection(fromElement, toElement, type = 'default') {
+            if (this.advancedCanvas) {
+                return this.advancedCanvas.createConnection(fromElement, toElement, type);
+            }
+        },
+        
+        removeConnection(connectionId) {
+            if (this.advancedCanvas) {
+                this.advancedCanvas.removeConnection(connectionId);
             }
         },
         
@@ -842,6 +948,11 @@ const SiriusApp = {
         window.removeEventListener('resize', this.handleResize);
         document.removeEventListener('mousemove', this.handleMouseMove);
         document.removeEventListener('mouseup', this.handleMouseUp);
+        
+        // Cleanup advanced canvas
+        if (this.advancedCanvas) {
+            this.advancedCanvas.destroy();
+        }
     }
 };
 
