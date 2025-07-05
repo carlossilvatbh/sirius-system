@@ -1,375 +1,477 @@
-// SIRIUS Vue.js Application
+// SIRIUS Vue.js Application - Enhanced UX/UI
 const { createApp } = Vue;
 
 const SiriusApp = {
     template: `
-    <div class="min-h-screen bg-gray-50">
+    <div class="sirius-container">
         <!-- Loading State -->
-        <div v-if="loading" class="fixed inset-0 bg-gray-50 bg-opacity-75 flex items-center justify-center z-50">
+        <div v-if="loading" class="loading-overlay">
             <div class="text-center">
                 <div class="loading-spinner mx-auto mb-4"></div>
-                <p class="text-gray-600">Loading SIRIUS...</p>
+                <p class="text-gray-600 font-medium">Loading SIRIUS...</p>
             </div>
         </div>
         
-        <!-- Main Canvas Interface -->
-        <div class="flex h-screen" v-show="!loading">
-            <!-- Left Sidebar - Structure Library -->
-            <div class="w-80 bg-white shadow-lg border-r border-gray-200 overflow-y-auto">
-                <!-- Sidebar Header -->
-                <div class="p-6 border-b border-gray-200">
-                    <h2 class="text-lg font-bold text-gray-900 mb-2">Structure Library</h2>
-                    <p class="text-sm text-gray-600">Drag structures to the canvas</p>
-                </div>
-                
-                <!-- Search and Filters -->
-                <div class="p-4 border-b border-gray-200">
-                    <div class="relative mb-4">
-                        <input 
-                            type="text" 
-                            v-model="searchQuery"
-                            placeholder="Search structures..."
-                            class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sirius-blue focus:border-transparent"
-                        >
-                        <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
-                    </div>
-                    
-                    <select 
-                        v-model="selectedCategory"
-                        class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sirius-blue focus:border-transparent"
+        <!-- Mobile Menu Button -->
+        <button 
+            v-if="isMobile" 
+            @click="toggleMobileSidebar"
+            class="fixed top-4 left-4 z-50 btn btn-primary lg:hidden"
+        >
+            <i class="fas fa-bars"></i>
+        </button>
+        
+        <!-- Mobile Overlay -->
+        <div 
+            v-if="isMobile && mobileSidebarOpen" 
+            @click="closeMobileSidebar"
+            class="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+        ></div>
+        
+        <!-- Left Sidebar - Structure Library -->
+        <div class="sidebar" :class="{ 'open': mobileSidebarOpen }">
+            <!-- Close button for mobile -->
+            <button 
+                v-if="isMobile"
+                @click="closeMobileSidebar"
+                class="absolute top-4 right-4 text-gray-500 hover:text-gray-700 z-10 lg:hidden"
+            >
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            
+            <!-- Sidebar Header -->
+            <div class="sidebar-header">
+                <h2>
+                    <i class="fas fa-layer-group"></i>
+                    Structure Library
+                </h2>
+                <p>Drag structures to the canvas to build your configuration</p>
+            </div>
+            
+            <!-- Search and Filters -->
+            <div class="search-filters">
+                <div class="search-container">
+                    <input 
+                        type="text" 
+                        v-model="searchQuery"
+                        placeholder="Search structures..."
+                        class="search-input"
+                        @input="handleSearchInput"
                     >
-                        <option value="">All Categories</option>
-                        <option value="BDAO_SAC">Bahamas DAO SAC</option>
-                        <option value="WYOMING_DAO_LLC">Wyoming DAO LLC</option>
-                        <option value="BTS_VAULT">BTS Vault</option>
-                        <option value="WYOMING_FOUNDATION">Wyoming Foundation</option>
-                        <option value="WYOMING_CORP">Wyoming Corporation</option>
-                        <option value="NATIONALIZATION">Nationalization</option>
-                        <option value="FUND_TOKEN">Fund Token</option>
-                    </select>
+                    <i class="fas fa-search search-icon"></i>
                 </div>
                 
-                <!-- Structure Cards -->
-                <div class="p-4">
-                    <div 
-                        v-for="estrutura in filteredEstruturas" 
-                        :key="estrutura.id"
-                        class="structure-card"
-                        draggable="true"
-                        @dragstart="iniciarDrag(estrutura, $event)"
-                        @click="selecionarEstrutura(estrutura)"
-                        :class="{ 'ring-2 ring-sirius-blue': estruturaSelecionada?.id === estrutura.id }"
-                    >
-                        <div class="complexity-indicator" :class="'complexity-' + estrutura.complexidade"></div>
-                        <div class="structure-type">{{ estrutura.tipo }}</div>
-                        <div class="structure-name">{{ estrutura.nome }}</div>
-                        <div class="structure-cost">{{ formatCurrency(estrutura.custo_base) }}</div>
-                        <div class="text-xs text-gray-500 mt-2">
-                            <i class="fas fa-clock mr-1"></i>{{ estrutura.tempo_implementacao }} days
-                        </div>
+                <select 
+                    v-model="selectedCategory"
+                    class="filter-select"
+                    @change="filterStructures"
+                >
+                    <option value="">All Categories</option>
+                    <option value="BDAO_SAC">Bahamas DAO SAC</option>
+                    <option value="WYOMING_DAO_LLC">Wyoming DAO LLC</option>
+                    <option value="BTS_VAULT">BTS Vault</option>
+                    <option value="WYOMING_FOUNDATION">Wyoming Foundation</option>
+                    <option value="WYOMING_CORP">Wyoming Corporation</option>
+                    <option value="NATIONALIZATION">Nationalization</option>
+                    <option value="FUND_TOKEN">Fund Token</option>
+                </select>
+            </div>
+            
+            <!-- Structure Cards -->
+            <div class="p-4 space-y-3">
+                <div 
+                    v-for="estrutura in filteredEstruturas" 
+                    :key="estrutura.id"
+                    class="structure-card animate-fadeIn"
+                    draggable="true"
+                    @dragstart="iniciarDrag(estrutura, $event)"
+                    @click="selecionarEstrutura(estrutura)"
+                    :class="{ 'ring-2 ring-blue-500': estruturaSelecionada?.id === estrutura.id }"
+                >
+                    <div class="complexity-indicator" :class="'complexity-' + estrutura.complexidade"></div>
+                    <div class="structure-type">{{ estrutura.tipo }}</div>
+                    <div class="structure-name">{{ estrutura.nome }}</div>
+                    <div class="structure-cost">{{ formatCurrency(estrutura.custo_base) }}</div>
+                    <div class="structure-meta">
+                        <span><i class="fas fa-clock mr-1"></i>{{ estrutura.tempo_implementacao }} days</span>
+                        <span><i class="fas fa-shield-alt mr-1"></i>{{ estrutura.nivel_confidencialidade }}/5</span>
                     </div>
                 </div>
                 
-                <!-- Templates Section -->
-                <div class="p-4 border-t border-gray-200">
-                    <h3 class="text-md font-semibold text-gray-900 mb-3">Quick Templates</h3>
+                <!-- No Results State -->
+                <div v-if="filteredEstruturas.length === 0" class="text-center py-8">
+                    <i class="fas fa-search text-3xl text-gray-300 mb-4"></i>
+                    <p class="text-gray-500 font-medium">No structures found</p>
+                    <p class="text-gray-400 text-sm">Try adjusting your search criteria</p>
+                </div>
+            </div>
+            
+            <!-- Templates Section -->
+            <div class="p-4 border-t border-gray-200">
+                <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <i class="fas fa-clipboard-list text-blue-600"></i>
+                    Quick Templates
+                </h3>
+                <div class="space-y-3">
                     <div 
                         v-for="template in templates" 
                         :key="template.id"
-                        class="template-card cursor-pointer"
+                        class="template-card cursor-pointer p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 hover:border-blue-300 transition-all duration-300 hover:shadow-md"
                         @click="carregarTemplate(template.id)"
                     >
-                        <div class="template-category">{{ template.categoria }}</div>
-                        <div class="template-name">{{ template.nome }}</div>
-                        <div class="template-description">{{ template.descricao }}</div>
-                        <div class="template-stats">
-                            <span>{{ formatCurrency(template.custo_total || 0) }}</span>
-                            <span>{{ template.uso_count || 0 }} uses</span>
+                        <div class="template-category text-xs font-semibold text-blue-600 uppercase tracking-wide">{{ template.categoria }}</div>
+                        <div class="template-name font-bold text-gray-900 mt-1">{{ template.nome }}</div>
+                        <div class="template-description text-sm text-gray-600 mt-1">{{ template.descricao }}</div>
+                        <div class="template-stats flex justify-between items-center mt-3 text-sm">
+                            <span class="font-semibold text-green-600">{{ formatCurrency(template.custo_total || 0) }}</span>
+                            <span class="text-gray-500">{{ template.uso_count || 0 }} uses</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Main Content Area -->
+        <div class="flex-1 flex flex-col">
+            <!-- Top Toolbar -->
+            <div class="bg-white border-b border-gray-200 p-4 shadow-sm">
+                <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button 
+                            @click="limparCanvas"
+                            class="btn btn-secondary"
+                            :disabled="elementos.length === 0"
+                            data-tooltip="Clear all elements"
+                        >
+                            <i class="fas fa-trash"></i>
+                            <span class="hidden sm:inline">Clear</span>
+                        </button>
+                        
+                        <button 
+                            @click="undoAction"
+                            class="btn btn-secondary tooltip"
+                            :disabled="!canUndo"
+                            data-tooltip="Undo (Ctrl+Z)"
+                        >
+                            <i class="fas fa-undo"></i>
+                        </button>
+                        
+                        <button 
+                            @click="redoAction"
+                            class="btn btn-secondary tooltip"
+                            :disabled="!canRedo"
+                            data-tooltip="Redo (Ctrl+Y)"
+                        >
+                            <i class="fas fa-redo"></i>
+                        </button>
+                        
+                        <button 
+                            @click="toggleGridSnap"
+                            class="btn btn-secondary tooltip"
+                            :class="{ 'btn-primary': snapToGrid }"
+                            data-tooltip="Toggle Grid Snap (G)"
+                        >
+                            <i class="fas fa-th"></i>
+                        </button>
+                        
+                        <button 
+                            @click="fitCanvasToContent"
+                            class="btn btn-secondary tooltip"
+                            :disabled="elementos.length === 0"
+                            data-tooltip="Fit to Content"
+                        >
+                            <i class="fas fa-expand-arrows-alt"></i>
+                        </button>
+                        
+                        <div class="hidden lg:block w-px h-6 bg-gray-300"></div>
+                        
+                        <button 
+                            @click="salvarConfiguracao"
+                            class="btn btn-primary"
+                            :disabled="elementos.length === 0"
+                        >
+                            <i class="fas fa-save"></i>
+                            <span class="hidden sm:inline">Save</span>
+                        </button>
+                        
+                        <button 
+                            @click="gerarPDF"
+                            class="btn btn-success"
+                            :disabled="elementos.length === 0"
+                        >
+                            <i class="fas fa-file-pdf"></i>
+                            <span class="hidden sm:inline">PDF</span>
+                        </button>
+                    </div>
+                    
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                        <!-- Pricing Scenario Selector -->
+                        <div class="flex items-center gap-2">
+                            <label class="text-sm font-medium text-gray-700">Scenario:</label>
+                            <select 
+                                v-model="cenarioPrecificacao"
+                                class="filter-select min-w-[140px]"
+                                @change="recalcularCustos"
+                            >
+                                <option value="basico">Basic</option>
+                                <option value="completo">Complete</option>
+                                <option value="premium">Premium</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Total Cost Display -->
+                        <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg px-4 py-3 shadow-sm">
+                            <div class="text-xs text-green-600 font-semibold uppercase tracking-wide">Total Cost</div>
+                            <div class="text-xl font-bold text-green-800">
+                                {{ formatCurrency(custoTotalComCenario) }}
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <!-- Main Canvas Area -->
-            <div class="flex-1 flex flex-col">
-                <!-- Canvas Toolbar -->
-                <div class="bg-white border-b border-gray-200 p-4">
-                    <div class="flex justify-between items-center">
-                        <div class="flex items-center space-x-4">
-                            <button 
-                                @click="limparCanvas"
-                                class="btn-secondary"
-                                :disabled="elementos.length === 0"
-                            >
-                                <i class="fas fa-trash"></i>
-                                Clear Canvas
-                            </button>
-                            
-                            <button 
-                                @click="undoAction"
-                                class="btn-secondary"
-                                title="Undo (Ctrl+Z)"
-                            >
-                                <i class="fas fa-undo"></i>
-                            </button>
-                            
-                            <button 
-                                @click="redoAction"
-                                class="btn-secondary"
-                                title="Redo (Ctrl+Y)"
-                            >
-                                <i class="fas fa-redo"></i>
-                            </button>
-                            
-                            <button 
-                                @click="toggleGridSnap"
-                                class="btn-secondary"
-                                :class="{ 'bg-sirius-blue text-white': snapToGrid }"
-                                title="Toggle Grid Snap (G)"
-                            >
-                                <i class="fas fa-th"></i>
-                            </button>
-                            
-                            <button 
-                                @click="fitCanvasToContent"
-                                class="btn-secondary"
-                                :disabled="elementos.length === 0"
-                                title="Fit to Content"
-                            >
-                                <i class="fas fa-expand-arrows-alt"></i>
-                            </button>
-                            
-                            <button 
-                                @click="resetCanvasView"
-                                class="btn-secondary"
-                                title="Reset View"
-                            >
-                                <i class="fas fa-home"></i>
-                            </button>
-                            
-                            <button 
-                                @click="salvarTemplate"
-                                class="btn-primary"
-                                :disabled="elementos.length === 0"
-                            >
-                                <i class="fas fa-save"></i>
-                                Save Template
-                            </button>
-                            
-                            <button 
-                                @click="gerarPDF"
-                                class="btn-primary"
-                                :disabled="elementos.length === 0"
-                            >
-                                <i class="fas fa-file-pdf"></i>
-                                Generate PDF
-                            </button>
-                        </div>
-                        
-                        <div class="flex items-center space-x-4">
-                            <!-- Pricing Scenario Selector -->
-                            <select 
-                                v-model="cenarioPrecificacao"
-                                class="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sirius-blue"
-                            >
-                                <option value="basico">Basic Scenario</option>
-                                <option value="completo">Complete Scenario</option>
-                                <option value="premium">Premium Scenario</option>
-                            </select>
-                            
-                            <!-- Total Cost Display -->
-                            <div class="bg-green-50 border border-green-200 rounded-lg px-4 py-2">
-                                <div class="text-sm text-green-600 font-medium">Total Cost</div>
-                                <div class="text-lg font-bold text-green-800">
-                                    {{ formatCurrency(custoTotalComCenario) }}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Canvas Container -->
-                <div class="flex-1 relative">
-                    <div 
-                        ref="canvasContainer"
-                        class="canvas-container w-full h-full"
-                        @dragover="permitirDrop"
-                        @drop="handleDrop"
-                    >
-                        <!-- Canvas Elements -->
-                        <div class="relative w-full h-full p-8">
-                            <div 
-                                v-for="elemento in elementos" 
-                                :key="elemento.id"
-                                class="absolute bg-white rounded-lg shadow-lg border-2 border-gray-200 p-4 cursor-move"
-                                :style="{ 
-                                    left: elemento.position.x + 'px', 
-                                    top: elemento.position.y + 'px',
-                                    width: '200px'
-                                }"
-                                @mousedown="iniciarArrastar(elemento, $event)"
-                                @click="selecionarElemento(elemento)"
-                                :class="{ 'border-sirius-blue': elementoSelecionado?.id === elemento.id }"
-                            >
-                                <div class="text-sm font-semibold text-gray-900">{{ elemento.estrutura.nome }}</div>
-                                <div class="text-xs text-gray-500 mt-1">{{ elemento.estrutura.tipo }}</div>
-                                <div class="text-sm font-bold text-green-600 mt-2">
-                                    {{ formatCurrency(elemento.estrutura.custo_base) }}
-                                </div>
+            <!-- Canvas Container -->
+            <div class="flex-1 relative bg-gray-50">
+                <div 
+                    ref="canvasContainer"
+                    class="canvas-container w-full h-full"
+                    @dragover="permitirDrop"
+                    @drop="handleDrop"
+                    @click="deselecionarTudo"
+                >
+                    <!-- Canvas Elements -->
+                    <div class="relative w-full h-full p-4 sm:p-8">
+                        <div 
+                            v-for="elemento in elementos" 
+                            :key="elemento.id"
+                            class="canvas-element"
+                            :style="{ 
+                                left: elemento.position.x + 'px', 
+                                top: elemento.position.y + 'px',
+                                width: isMobile ? '180px' : '220px'
+                            }"
+                            @mousedown="iniciarArrastar(elemento, $event)"
+                            @touchstart="iniciarArrastar(elemento, $event)"
+                            @click.stop="selecionarElemento(elemento)"
+                            :class="{ 'selected': elementoSelecionado?.id === elemento.id }"
+                        >
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="text-sm font-bold text-gray-900">{{ elemento.estrutura.nome }}</div>
                                 <button 
                                     @click.stop="removerElemento(elemento.id)"
-                                    class="absolute top-2 right-2 text-red-500 hover:text-red-700"
+                                    class="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full p-1 transition-colors"
                                 >
                                     <i class="fas fa-times text-xs"></i>
                                 </button>
                             </div>
-                        </div>
-                        
-                        <!-- Empty State -->
-                        <div v-if="elementos.length === 0" class="absolute inset-0 flex items-center justify-center">
-                            <div class="text-center">
-                                <i class="fas fa-network-wired text-6xl text-gray-300 mb-4"></i>
-                                <h3 class="text-xl font-semibold text-gray-500 mb-2">Start Building Your Structure</h3>
-                                <p class="text-gray-400">Drag legal structures from the sidebar to begin</p>
+                            
+                            <div class="text-xs text-gray-500 mb-2">{{ elemento.estrutura.tipo }}</div>
+                            
+                            <div class="flex justify-between items-center">
+                                <div class="text-sm font-bold text-green-600">
+                                    {{ formatCurrency(elemento.estrutura.custo_base) }}
+                                </div>
+                                <div class="complexity-indicator" :class="'complexity-' + elemento.estrutura.complexidade"></div>
+                            </div>
+                            
+                            <div class="mt-2 text-xs text-gray-400 flex items-center gap-2">
+                                <span><i class="fas fa-clock mr-1"></i>{{ elemento.estrutura.tempo_implementacao }}d</span>
+                                <span><i class="fas fa-shield-alt mr-1"></i>{{ elemento.estrutura.nivel_confidencialidade }}/5</span>
                             </div>
                         </div>
+                    </div>
+                    
+                    <!-- Enhanced Empty State -->
+                    <div v-if="elementos.length === 0" class="empty-state">
+                        <div class="animate-bounce">
+                            <i class="fas fa-network-wired"></i>
+                        </div>
+                        <h3>Start Building Your Structure</h3>
+                        <p>Drag legal structures from the sidebar to begin designing your optimal configuration</p>
+                        <button 
+                            v-if="isMobile"
+                            @click="openMobileSidebar"
+                            class="btn btn-primary mt-4"
+                        >
+                            <i class="fas fa-plus mr-2"></i>
+                            Add Structure
+                        </button>
                     </div>
                 </div>
             </div>
             
-            <!-- Right Sidebar - Information Panel -->
-            <div class="w-96 bg-white shadow-lg border-l border-gray-200 overflow-y-auto">
+            <!-- Right Sidebar - Information Panel (Desktop Only) -->
+            <div v-if="!isMobile" class="w-96 bg-white shadow-lg border-l border-gray-200 overflow-y-auto">
                 <!-- Structure Information -->
                 <div v-if="estruturaSelecionada" class="p-6">
                     <div class="info-panel">
                         <h3>
-                            <i class="fas fa-info-circle text-sirius-blue"></i>
+                            <i class="fas fa-info-circle"></i>
                             Structure Details
                         </h3>
                         
                         <div class="space-y-4">
                             <div>
-                                <h4 class="font-semibold text-gray-900 mb-2">{{ estruturaSelecionada.nome }}</h4>
-                                <p class="text-sm text-gray-600">{{ estruturaSelecionada.descricao }}</p>
+                                <h4 class="font-bold text-gray-900 mb-3">{{ estruturaSelecionada.nome }}</h4>
+                                <p class="text-sm text-gray-600 leading-relaxed">{{ estruturaSelecionada.descricao }}</p>
                             </div>
                             
-                            <div class="metric">
-                                <span class="metric-label">Base Cost</span>
-                                <span class="metric-value">{{ formatCurrency(estruturaSelecionada.custo_base) }}</span>
-                            </div>
-                            
-                            <div class="metric">
-                                <span class="metric-label">Annual Maintenance</span>
-                                <span class="metric-value">{{ formatCurrency(estruturaSelecionada.custo_manutencao) }}</span>
-                            </div>
-                            
-                            <div class="metric">
-                                <span class="metric-label">Implementation Time</span>
-                                <span class="metric-value">{{ estruturaSelecionada.tempo_implementacao }} days</span>
-                            </div>
-                            
-                            <div class="metric">
-                                <span class="metric-label">Complexity</span>
-                                <span class="metric-value">{{ estruturaSelecionada.complexidade }}/5</span>
-                            </div>
-                            
-                            <div class="metric">
-                                <span class="metric-label">Confidentiality Level</span>
-                                <span class="metric-value">{{ estruturaSelecionada.nivel_confidencialidade }}/5</span>
-                            </div>
-                            
-                            <div class="metric">
-                                <span class="metric-label">Asset Protection</span>
-                                <span class="metric-value">{{ estruturaSelecionada.protecao_patrimonial }}/5</span>
+                            <div class="grid grid-cols-1 gap-2">
+                                <div class="metric">
+                                    <span class="metric-label">Base Cost</span>
+                                    <span class="metric-value success">{{ formatCurrency(estruturaSelecionada.custo_base) }}</span>
+                                </div>
+                                
+                                <div class="metric">
+                                    <span class="metric-label">Annual Maintenance</span>
+                                    <span class="metric-value">{{ formatCurrency(estruturaSelecionada.custo_manutencao) }}</span>
+                                </div>
+                                
+                                <div class="metric">
+                                    <span class="metric-label">Implementation Time</span>
+                                    <span class="metric-value">{{ estruturaSelecionada.tempo_implementacao }} days</span>
+                                </div>
+                                
+                                <div class="metric">
+                                    <span class="metric-label">Complexity</span>
+                                    <span class="metric-value" :class="getComplexityClass(estruturaSelecionada.complexidade)">
+                                        {{ estruturaSelecionada.complexidade }}/5
+                                    </span>
+                                </div>
+                                
+                                <div class="metric">
+                                    <span class="metric-label">Confidentiality Level</span>
+                                    <span class="metric-value">{{ estruturaSelecionada.nivel_confidencialidade }}/5</span>
+                                </div>
+                                
+                                <div class="metric">
+                                    <span class="metric-label">Asset Protection</span>
+                                    <span class="metric-value">{{ estruturaSelecionada.protecao_patrimonial }}/5</span>
+                                </div>
                             </div>
                         </div>
                     </div>
                     
                     <!-- Tax Information -->
-                    <div class="info-panel mt-6">
+                    <div class="info-panel">
                         <h3>
-                            <i class="fas fa-calculator text-sirius-blue"></i>
+                            <i class="fas fa-calculator"></i>
                             Tax Implications
                         </h3>
                         
                         <div class="space-y-4">
                             <div>
-                                <h4 class="font-semibold text-gray-900 mb-2">United States</h4>
-                                <p class="text-sm text-gray-600">{{ estruturaSelecionada.impacto_tributario_eua }}</p>
+                                <h4 class="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                                    <i class="fas fa-flag-usa text-blue-600"></i>
+                                    United States
+                                </h4>
+                                <p class="text-sm text-gray-600 leading-relaxed">{{ estruturaSelecionada.impacto_tributario_eua }}</p>
                             </div>
                             
                             <div>
-                                <h4 class="font-semibold text-gray-900 mb-2">Brazil</h4>
-                                <p class="text-sm text-gray-600">{{ estruturaSelecionada.impacto_tributario_brasil }}</p>
+                                <h4 class="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                                    <i class="fas fa-flag text-green-600"></i>
+                                    Brazil
+                                </h4>
+                                <p class="text-sm text-gray-600 leading-relaxed">{{ estruturaSelecionada.impacto_tributario_brasil }}</p>
                             </div>
                         </div>
                     </div>
-                    
-                    <!-- Privacy Information -->
-                    <div class="info-panel mt-6">
-                        <h3>
-                            <i class="fas fa-shield-alt text-sirius-blue"></i>
-                            Privacy & Protection
-                        </h3>
-                        
-                        <p class="text-sm text-gray-600">{{ estruturaSelecionada.impacto_privacidade }}</p>
-                    </div>
                 </div>
                 
-                <!-- Configuration Summary -->
+                <!-- Canvas Summary -->
                 <div v-if="elementos.length > 0" class="p-6 border-t border-gray-200">
                     <div class="info-panel">
                         <h3>
-                            <i class="fas fa-chart-line text-sirius-blue"></i>
+                            <i class="fas fa-chart-line"></i>
                             Configuration Summary
                         </h3>
                         
-                        <div class="metric">
-                            <span class="metric-label">Total Structures</span>
-                            <span class="metric-value">{{ elementos.length }}</span>
-                        </div>
-                        
-                        <div class="metric">
-                            <span class="metric-label">Base Cost</span>
-                            <span class="metric-value">{{ formatCurrency(custoTotal) }}</span>
-                        </div>
-                        
-                        <div class="metric">
-                            <span class="metric-label">Total Cost</span>
-                            <span class="metric-value">{{ formatCurrency(custoTotalComCenario) }}</span>
-                        </div>
-                        
-                        <div class="metric">
-                            <span class="metric-label">Max Implementation Time</span>
-                            <span class="metric-value">{{ tempoTotal }} days</span>
+                        <div class="space-y-3">
+                            <div class="metric">
+                                <span class="metric-label">Total Structures</span>
+                                <span class="metric-value">{{ elementos.length }}</span>
+                            </div>
+                            
+                            <div class="metric">
+                                <span class="metric-label">Total Setup Cost</span>
+                                <span class="metric-value success">{{ formatCurrency(custoTotalSetup) }}</span>
+                            </div>
+                            
+                            <div class="metric">
+                                <span class="metric-label">Annual Maintenance</span>
+                                <span class="metric-value">{{ formatCurrency(custoTotalManutencao) }}</span>
+                            </div>
+                            
+                            <div class="metric">
+                                <span class="metric-label">Avg. Implementation</span>
+                                <span class="metric-value">{{ tempoMedioImplementacao }} days</span>
+                            </div>
+                            
+                            <div class="metric">
+                                <span class="metric-label">Avg. Complexity</span>
+                                <span class="metric-value" :class="getComplexityClass(complexidadeMedia)">
+                                    {{ complexidadeMedia.toFixed(1) }}/5
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
-                
-                <!-- Validation Results -->
-                <div v-if="validacao.erros.length > 0 || validacao.alertas.length > 0 || validacao.sugestoes.length > 0" 
-                     class="p-6 border-t border-gray-200">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                        <i class="fas fa-exclamation-triangle text-yellow-500"></i>
-                        Validation Results
-                    </h3>
-                    
-                    <!-- Errors -->
-                    <div v-for="erro in validacao.erros" :key="erro.mensagem" class="validation-alert error">
-                        <i class="fas fa-times-circle alert-icon"></i>
-                        {{ erro.mensagem }}
+            </div>
+            
+            <!-- Mobile Bottom Sheet for Structure Details -->
+            <div v-if="isMobile && estruturaSelecionada" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 rounded-t-xl shadow-2xl z-30 transform transition-transform duration-300"
+                 :class="{ 'translate-y-0': showMobileDetails, 'translate-y-full': !showMobileDetails }">
+                <div class="p-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-bold text-gray-900">{{ estruturaSelecionada.nome }}</h3>
+                        <button @click="closeMobileDetails" class="text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-times"></i>
+                        </button>
                     </div>
                     
-                    <!-- Warnings -->
-                    <div v-for="alerta in validacao.alertas" :key="alerta.mensagem" class="validation-alert warning">
-                        <i class="fas fa-exclamation-triangle alert-icon"></i>
-                        {{ alerta.mensagem }}
+                    <div class="max-h-64 overflow-y-auto">
+                        <p class="text-sm text-gray-600 mb-4">{{ estruturaSelecionada.descricao }}</p>
+                        
+                        <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <span class="text-gray-500">Base Cost</span>
+                                <div class="font-semibold text-green-600">{{ formatCurrency(estruturaSelecionada.custo_base) }}</div>
+                            </div>
+                            <div>
+                                <span class="text-gray-500">Implementation</span>
+                                <div class="font-semibold">{{ estruturaSelecionada.tempo_implementacao }} days</div>
+                            </div>
+                            <div>
+                                <span class="text-gray-500">Complexity</span>
+                                <div class="font-semibold">{{ estruturaSelecionada.complexidade }}/5</div>
+                            </div>
+                            <div>
+                                <span class="text-gray-500">Confidentiality</span>
+                                <div class="font-semibold">{{ estruturaSelecionada.nivel_confidencialidade }}/5</div>
+                            </div>
+                        </div>
                     </div>
-                    
-                    <!-- Suggestions -->
-                    <div v-for="sugestao in validacao.sugestoes" :key="sugestao.mensagem" class="validation-alert info">
-                        <i class="fas fa-lightbulb alert-icon"></i>
-                        {{ sugestao.mensagem }}
+                </div>
+            </div>
+            
+            <!-- Notifications -->
+            <div class="fixed top-4 right-4 z-50 space-y-2">
+                <div 
+                    v-for="notification in notifications" 
+                    :key="notification.id"
+                    class="validation-alert animate-slideIn"
+                    :class="notification.type"
+                >
+                    <div class="flex items-center gap-3">
+                        <i :class="getNotificationIcon(notification.type)"></i>
+                        <div>
+                            <div class="font-semibold">{{ notification.title }}</div>
+                            <div class="text-sm opacity-90">{{ notification.message }}</div>
+                        </div>
+                        <button @click="removeNotification(notification.id)" class="ml-auto text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-times"></i>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -394,6 +496,19 @@ const SiriusApp = {
             selectedCategory: '',
             cenarioPrecificacao: 'basico',
             loading: true,
+            
+            // Mobile responsiveness
+            isMobile: false,
+            mobileSidebarOpen: false,
+            showMobileDetails: false,
+            
+            // Notifications
+            notifications: [],
+            notificationId: 0,
+            
+            // Undo/Redo
+            history: [],
+            historyIndex: -1,
             
             // Drag and drop state
             draggedElement: null,
@@ -446,14 +561,58 @@ const SiriusApp = {
         
         custoTotalComCenario() {
             let multiplicador = 1;
-            if (this.cenarioPrecificacao === 'completo') multiplicador = 1.5;
-            if (this.cenarioPrecificacao === 'premium') multiplicador = 2.2;
-            return this.custoTotal * multiplicador;
+            switch (this.cenarioPrecificacao) {
+                case 'completo':
+                    multiplicador = 1.3;
+                    break;
+                case 'premium':
+                    multiplicador = 1.6;
+                    break;
+            }
+            return this.custoTotalSetup * multiplicador;
+        },
+        
+        custoTotalSetup() {
+            return this.elementos.reduce((total, elemento) => 
+                total + parseFloat(elemento.estrutura.custo_base || 0), 0
+            );
+        },
+        
+        custoTotalManutencao() {
+            return this.elementos.reduce((total, elemento) => 
+                total + parseFloat(elemento.estrutura.custo_manutencao || 0), 0
+            );
+        },
+        
+        tempoMedioImplementacao() {
+            if (this.elementos.length === 0) return 0;
+            const tempoTotal = this.elementos.reduce((total, elemento) => 
+                total + elemento.estrutura.tempo_implementacao, 0
+            );
+            return Math.round(tempoTotal / this.elementos.length);
+        },
+        
+        complexidadeMedia() {
+            if (this.elementos.length === 0) return 0;
+            const complexidadeTotal = this.elementos.reduce((total, elemento) => 
+                total + elemento.estrutura.complexidade, 0
+            );
+            return complexidadeTotal / this.elementos.length;
+        },
+        
+        canUndo() {
+            return this.historyIndex > 0;
+        },
+        
+        canRedo() {
+            return this.historyIndex < this.history.length - 1;
         }
     },
     
     mounted() {
         this.initializeApp();
+        this.checkMobile();
+        this.configurarEventListeners();
         
         // Initialize advanced canvas features
         this.$nextTick(() => {
@@ -509,16 +668,145 @@ const SiriusApp = {
             document.addEventListener('mouseup', this.handleMouseUp);
         },
         
+        // Mobile responsiveness methods
+        checkMobile() {
+            this.isMobile = window.innerWidth < 768;
+            window.addEventListener('resize', () => {
+                this.isMobile = window.innerWidth < 768;
+                if (!this.isMobile) {
+                    this.mobileSidebarOpen = false;
+                    this.showMobileDetails = false;
+                }
+            });
+        },
+        
+        toggleMobileSidebar() {
+            this.mobileSidebarOpen = !this.mobileSidebarOpen;
+        },
+        
+        openMobileSidebar() {
+            this.mobileSidebarOpen = true;
+        },
+        
+        closeMobileSidebar() {
+            this.mobileSidebarOpen = false;
+        },
+        
+        closeMobileDetails() {
+            this.showMobileDetails = false;
+            this.estruturaSelecionada = null;
+        },
+        
+        // Enhanced search functionality
+        handleSearchInput() {
+            // Add debouncing for better performance
+            clearTimeout(this.searchTimeout);
+            this.searchTimeout = setTimeout(() => {
+                if (this.searchQuery.length === 0) {
+                    this.selectedCategory = '';
+                }
+            }, 300);
+        },
+        
+        filterStructures() {
+            // This will trigger the computed property
+            this.$forceUpdate();
+        },
+        
+        // Notification system
+        showNotification(message, type = 'info', title = '') {
+            const notification = {
+                id: this.notificationId++,
+                message,
+                type,
+                title: title || this.getNotificationTitle(type),
+                timestamp: Date.now()
+            };
+            
+            this.notifications.push(notification);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                this.removeNotification(notification.id);
+            }, 5000);
+        },
+        
+        removeNotification(id) {
+            const index = this.notifications.findIndex(n => n.id === id);
+            if (index > -1) {
+                this.notifications.splice(index, 1);
+            }
+        },
+        
+        getNotificationTitle(type) {
+            const titles = {
+                success: 'Success',
+                error: 'Error',
+                warning: 'Warning',
+                info: 'Information'
+            };
+            return titles[type] || 'Notification';
+        },
+        
+        getNotificationIcon(type) {
+            const icons = {
+                success: 'fas fa-check-circle',
+                error: 'fas fa-exclamation-triangle',
+                warning: 'fas fa-exclamation-circle',
+                info: 'fas fa-info-circle'
+            };
+            return icons[type] || 'fas fa-info-circle';
+        },
+        
+        // History management for undo/redo
+        saveToHistory() {
+            // Remove future history if we're in the middle
+            if (this.historyIndex < this.history.length - 1) {
+                this.history.splice(this.historyIndex + 1);
+            }
+            
+            // Add current state to history
+            this.history.push(JSON.parse(JSON.stringify(this.elementos)));
+            this.historyIndex++;
+            
+            // Limit history size
+            if (this.history.length > 50) {
+                this.history.shift();
+                this.historyIndex--;
+            }
+        },
+        
+        undoAction() {
+            if (this.canUndo) {
+                this.historyIndex--;
+                this.elementos = JSON.parse(JSON.stringify(this.history[this.historyIndex]));
+                this.showNotification('Action undone', 'info');
+            }
+        },
+        
+        redoAction() {
+            if (this.canRedo) {
+                this.historyIndex++;
+                this.elementos = JSON.parse(JSON.stringify(this.history[this.historyIndex]));
+                this.showNotification('Action redone', 'info');
+            }
+        },
+        
         // Drag and Drop Methods
         iniciarDrag(estrutura, event) {
-            event.dataTransfer.setData('estrutura', JSON.stringify(estrutura));
-            event.dataTransfer.effectAllowed = 'copy';
+            this.draggedElement = estrutura;
             
-            // Visual feedback
-            event.target.style.opacity = '0.5';
-            setTimeout(() => {
-                if (event.target) event.target.style.opacity = '1';
-            }, 100);
+            // Set drag image for better UX
+            if (event.dataTransfer) {
+                const dragImage = event.target.cloneNode(true);
+                dragImage.style.transform = 'rotate(5deg)';
+                dragImage.style.opacity = '0.8';
+                event.dataTransfer.setDragImage(dragImage, 50, 50);
+            }
+            
+            if (this.isMobile) {
+                this.closeMobileSidebar();
+            }
         },
         
         permitirDrop(event) {
@@ -560,11 +848,20 @@ const SiriusApp = {
         // Element Management
         selecionarEstrutura(estrutura) {
             this.estruturaSelecionada = estrutura;
+            
+            if (this.isMobile) {
+                this.showMobileDetails = true;
+                this.closeMobileSidebar();
+            }
         },
         
         selecionarElemento(elemento) {
             this.elementoSelecionado = elemento;
             this.estruturaSelecionada = elemento.estrutura;
+            
+            if (this.isMobile) {
+                this.showMobileDetails = true;
+            }
         },
         
         removerElemento(elementoId) {
@@ -941,30 +1238,6 @@ const SiriusApp = {
             );
         },
         
-        undoAction() {
-            if (this.advancedCanvas) {
-                this.advancedCanvas.undo();
-            }
-        },
-        
-        redoAction() {
-            if (this.advancedCanvas) {
-                this.advancedCanvas.redo();
-            }
-        },
-        
-        createConnection(fromElement, toElement, type = 'default') {
-            if (this.advancedCanvas) {
-                return this.advancedCanvas.createConnection(fromElement, toElement, type);
-            }
-        },
-        
-        removeConnection(connectionId) {
-            if (this.advancedCanvas) {
-                this.advancedCanvas.removeConnection(connectionId);
-            }
-        },
-        
         // Event Handlers
         handleKeydown(event) {
             // Keyboard shortcuts
@@ -1008,34 +1281,55 @@ const SiriusApp = {
             }).format(amount || 0);
         },
         
-        showNotification(message, type = 'info') {
-            // Use global notification system
-            if (window.SiriusUtils && window.SiriusUtils.showNotification) {
-                window.SiriusUtils.showNotification(message, type);
-            } else {
-                // Fallback
-                console.log(`[${type.toUpperCase()}] ${message}`);
+        // Helper methods for UI
+        getComplexityClass(complexity) {
+            if (complexity <= 2) return 'success';
+            if (complexity <= 3) return 'warning';
+            return 'error';
+        },
+        
+        // Enhanced cost calculation
+        recalcularCustos() {
+            this.custoTotal = this.custoTotalSetup;
+            
+            // Trigger validation
+            this.validarConfiguracao();
+        },
+        
+        validarConfiguracao() {
+            // Enhanced validation logic
+            const errors = [];
+            const warnings = [];
+            
+            if (this.elementos.length === 0) {
+                warnings.push('No structures added to canvas');
             }
-        }
+            
+            if (this.elementos.length > 10) {
+                warnings.push('Large number of structures may increase complexity');
+            }
+            
+            this.validacao = {
+                valido: errors.length === 0,
+                erros: errors,
+                alertas: warnings,
+                sugestoes: []
+            };
+        },
     },
     
     // Watchers
     watch: {
-        cenarioPrecificacao() {
-            // Recalculate when pricing scenario changes
-            this.$nextTick(() => {
-                // Any additional calculations needed
-            });
-        },
-        
         elementos: {
-            handler() {
-                // Auto-validate when elements change
-                this.$nextTick(() => {
-                    this.validarConfiguracao();
-                });
+            handler(newVal) {
+                this.saveToHistory();
+                this.recalcularCustos();
             },
             deep: true
+        },
+        
+        searchQuery(newVal) {
+            this.handleSearchInput();
         }
     },
     
