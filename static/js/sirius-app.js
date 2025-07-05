@@ -411,6 +411,7 @@ const SiriusApp = {
             // Costs and timing
             custoTotal: 0,
             tempoTotal: 0,
+            analiseDetalhada: null,
             
             // Advanced canvas features
             advancedCanvas: null,
@@ -615,13 +616,94 @@ const SiriusApp = {
         },
         
         // Calculations
-        calcularTotais() {
-            this.custoTotal = this.elementos.reduce((total, el) => 
-                total + parseFloat(el.estrutura.custo_base), 0);
+        async calcularTotais() {
+            if (this.elementos.length === 0) {
+                this.custoTotal = 0;
+                this.tempoTotal = 0;
+                this.validacao = {
+                    valido: true,
+                    erros: [],
+                    alertas: [],
+                    sugestoes: []
+                };
+                return;
+            }
             
-            this.tempoTotal = this.elementos.length > 0 ? 
-                Math.max(...this.elementos.map(el => 
-                    parseInt(el.estrutura.tempo_implementacao))) : 0;
+            try {
+                // Calculate advanced costs
+                const costResponse = await fetch('/api/calcular-custos/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': window.csrfToken
+                    },
+                    body: JSON.stringify({
+                        elementos: this.elementos,
+                        cenario: this.cenarioSelecionado,
+                        incluir_analise_risco: true
+                    })
+                });
+                
+                if (costResponse.ok) {
+                    const costData = await costResponse.json();
+                    this.custoTotal = costData.risk_adjusted_cost || 0;
+                    this.tempoTotal = costData.time_to_implementation || 0;
+                    this.analiseDetalhada = costData;
+                    
+                    // Perform advanced validation
+                    const validationResponse = await fetch('/api/validar-configuracao/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': window.csrfToken
+                        },
+                        body: JSON.stringify({
+                            elementos: this.elementos,
+                            analise_custos: costData
+                        })
+                    });
+                    
+                    if (validationResponse.ok) {
+                        const validationData = await validationResponse.json();
+                        this.validacao = {
+                            valido: validationData.is_valid,
+                            erros: validationData.results.filter(r => r.level === 'error').map(r => r.message),
+                            alertas: validationData.results.filter(r => r.level === 'warning').map(r => r.message),
+                            sugestoes: validationData.results.filter(r => r.level === 'info').map(r => r.message),
+                            detalhes: validationData
+                        };
+                    }
+                } else {
+                    // Fallback to simple calculation
+                    this.calcularTotaisSimples();
+                }
+                
+            } catch (error) {
+                console.error('Error calculating costs:', error);
+                // Fallback to simple calculation
+                this.calcularTotaisSimples();
+            }
+        },
+        
+        calcularTotaisSimples() {
+            // Simple fallback calculation
+            let custoTotal = 0;
+            let tempoMaximo = 0;
+            
+            this.elementos.forEach(elemento => {
+                const estrutura = elemento.estrutura;
+                let custo = estrutura.custo_base;
+                
+                // Apply scenario multiplier
+                const multiplicador = this.cenarioMultiplicadores[this.cenarioSelecionado] || 1;
+                custo *= multiplicador;
+                
+                custoTotal += custo;
+                tempoMaximo = Math.max(tempoMaximo, estrutura.tempo_implementacao);
+            });
+            
+            this.custoTotal = custoTotal;
+            this.tempoTotal = tempoMaximo;
         },
         
         // Validation

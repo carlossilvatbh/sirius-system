@@ -13,11 +13,11 @@
     window.djangoData = {
         csrfToken: '{{ csrf_token }}',
         apiUrls: {
-            estruturas: '{% url "estruturas_app:estruturas_json" %}',
-            templates: '{% url "estruturas_app:templates_json" %}',
-            validar: '{% url "estruturas_app:validar_configuracao" %}',
-            salvarTemplate: '{% url "estruturas_app:salvar_template" %}',
-            salvarConfiguracao: '{% url "estruturas_app:salvar_configuracao" %}'
+            estruturas: '{% url "estruturas_app:api_estruturas" %}',
+            templates: '{% url "estruturas_app:api_templates" %}',
+            validar: '{% url "estruturas_app:api_validar_configuracao" %}',
+            salvarTemplate: '{% url "estruturas_app:api_salvar_configuracao" %}',
+            salvarConfiguracao: '{% url "estruturas_app:api_salvar_configuracao" %}'
         }
     };
 </script>

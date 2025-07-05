@@ -1,481 +1,356 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.core.paginator import Paginator
-from django.db.models import Q
 import json
-import logging
-
 from .models import Estrutura, RegraValidacao, Template, ConfiguracaoSalva, AlertaJurisdicao
-
-logger = logging.getLogger(__name__)
-
+from .cost_calculator import calculate_configuration_cost_django
+from .validation_engine import validate_configuration_django
 
 def canvas_principal(request):
-    """
-    Main canvas page for the SIRIUS system.
-    Displays the drag-and-drop interface with available structures and templates.
-    """
-    estruturas = Estrutura.objects.filter(ativo=True).order_by('nome')
-    templates = Template.objects.filter(ativo=True).order_by('-uso_count')[:10]
-    
-    # Get jurisdiction alerts for display
-    alertas = AlertaJurisdicao.objects.filter(ativo=True, prioridade__gte=3).order_by('-prioridade')[:5]
-    
+    """Main canvas interface for building legal structures."""
     context = {
-        'estruturas': estruturas,
-        'templates': templates,
-        'alertas': alertas,
-        'page_title': 'SIRIUS - Legal Structure Canvas'
+        'page_title': 'SIRIUS Canvas - Legal Structure Designer'
     }
-    
     return render(request, 'canvas_vue.html', context)
 
+def admin_estruturas(request):
+    """Admin interface for managing structures."""
+    estruturas = Estrutura.objects.all()
+    context = {
+        'estruturas': estruturas,
+        'page_title': 'Structure Administration'
+    }
+    return render(request, 'admin_estruturas.html', context)
 
-def estruturas_json(request):
-    """
-    API endpoint returning all active structures with complete information.
-    Used by the frontend to populate the structure library.
-    """
+# API Endpoints
+
+@require_http_methods(["GET"])
+def api_estruturas(request):
+    """API endpoint to get all available structures."""
     try:
-        estruturas = Estrutura.objects.filter(ativo=True)
+        estruturas = Estrutura.objects.all()
         data = []
         
         for estrutura in estruturas:
-            estrutura_data = {
+            data.append({
                 'id': estrutura.id,
-                'nome': estrutura.nome,
                 'tipo': estrutura.tipo,
-                'tipo_display': estrutura.get_tipo_display(),
+                'nome': estrutura.nome,
                 'descricao': estrutura.descricao,
                 'custo_base': float(estrutura.custo_base),
                 'custo_manutencao': float(estrutura.custo_manutencao),
-                'custo_total_primeiro_ano': float(estrutura.get_custo_total_primeiro_ano()),
                 'tempo_implementacao': estrutura.tempo_implementacao,
                 'complexidade': estrutura.complexidade,
-                'complexidade_display': estrutura.get_complexity_display_text(),
-                
-                # Tax information
+                'nivel_confidencialidade': estrutura.nivel_confidencialidade,
                 'impacto_tributario_eua': estrutura.impacto_tributario_eua,
                 'impacto_tributario_brasil': estrutura.impacto_tributario_brasil,
                 'impacto_tributario_outros': estrutura.impacto_tributario_outros,
-                'formularios_obrigatorios_eua': estrutura.formularios_obrigatorios_eua,
-                'formularios_obrigatorios_brasil': estrutura.formularios_obrigatorios_brasil,
-                
-                # Privacy and protection
-                'nivel_confidencialidade': estrutura.nivel_confidencialidade,
                 'protecao_patrimonial': estrutura.protecao_patrimonial,
                 'impacto_privacidade': estrutura.impacto_privacidade,
-                
-                # Operational
                 'facilidade_banking': estrutura.facilidade_banking,
-                'documentacao_necessaria': estrutura.documentacao_necessaria,
-            }
-            data.append(estrutura_data)
+                'documentacao_necessaria': estrutura.documentacao_necessaria.split('\n') if estrutura.documentacao_necessaria else [],
+                'formularios_obrigatorios_eua': estrutura.formularios_obrigatorios_eua,
+                'formularios_obrigatorios_brasil': estrutura.formularios_obrigatorios_brasil,
+                'ativo': estrutura.ativo
+            })
         
         return JsonResponse(data, safe=False)
     
     except Exception as e:
-        logger.error(f"Error in estruturas_json: {str(e)}")
-        return JsonResponse({'error': 'Failed to load structures'}, status=500)
+        return JsonResponse({'error': str(e)}, status=500)
 
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def validar_configuracao(request):
-    """
-    Validates a configuration in real-time.
-    Checks compatibility rules and returns errors, warnings, and suggestions.
-    """
+@require_http_methods(["GET"])
+def api_templates(request):
+    """API endpoint to get all available templates."""
     try:
-        data = json.loads(request.body)
-        configuracao = data.get('configuracao', {})
-        elementos = configuracao.get('elementos', [])
-        
-        if not elementos:
-            return JsonResponse({
-                'valido': True,
-                'erros': [],
-                'alertas': [],
-                'sugestoes': []
-            })
-        
-        estruturas_ids = [elemento.get('estrutura_id') for elemento in elementos if elemento.get('estrutura_id')]
-        
-        erros = []
-        alertas = []
-        sugestoes = []
-        
-        # Check validation rules between structures
-        for i, id_a in enumerate(estruturas_ids):
-            for id_b in estruturas_ids[i+1:]:
-                # Check rules in both directions
-                regras = RegraValidacao.objects.filter(
-                    Q(estrutura_a_id=id_a, estrutura_b_id=id_b) |
-                    Q(estrutura_a_id=id_b, estrutura_b_id=id_a),
-                    ativo=True
-                )
-                
-                for regra in regras:
-                    if regra.tipo_relacionamento == 'INCOMPATIBLE':
-                        if regra.severidade == 'ERROR':
-                            erros.append({
-                                'tipo': 'erro',
-                                'severidade': 'ERROR',
-                                'mensagem': regra.descricao,
-                                'estruturas': [regra.estrutura_a.nome, regra.estrutura_b.nome]
-                            })
-                        else:
-                            alertas.append({
-                                'tipo': 'alerta',
-                                'severidade': regra.severidade,
-                                'mensagem': regra.descricao,
-                                'estruturas': [regra.estrutura_a.nome, regra.estrutura_b.nome]
-                            })
-                    
-                    elif regra.tipo_relacionamento == 'RECOMMENDED':
-                        sugestoes.append({
-                            'tipo': 'sugestao',
-                            'severidade': 'INFO',
-                            'mensagem': regra.descricao,
-                            'estruturas': [regra.estrutura_a.nome, regra.estrutura_b.nome]
-                        })
-                    
-                    elif regra.tipo_relacionamento == 'CONDITIONAL':
-                        # Check if conditions are met
-                        condicoes = regra.condicoes or {}
-                        if not _verificar_condicoes(condicoes, elementos):
-                            alertas.append({
-                                'tipo': 'condicional',
-                                'severidade': regra.severidade,
-                                'mensagem': f"Conditional requirement: {regra.descricao}",
-                                'estruturas': [regra.estrutura_a.nome, regra.estrutura_b.nome]
-                            })
-        
-        # Check for missing required combinations
-        estruturas_presentes = Estrutura.objects.filter(id__in=estruturas_ids)
-        for estrutura in estruturas_presentes:
-            regras_required = RegraValidacao.objects.filter(
-                estrutura_a=estrutura,
-                tipo_relacionamento='REQUIRED',
-                ativo=True
-            )
-            
-            for regra in regras_required:
-                if regra.estrutura_b.id not in estruturas_ids:
-                    if regra.severidade == 'ERROR':
-                        erros.append({
-                            'tipo': 'faltante',
-                            'severidade': 'ERROR',
-                            'mensagem': f"Required structure missing: {regra.descricao}",
-                            'estrutura_faltante': regra.estrutura_b.nome
-                        })
-                    else:
-                        sugestoes.append({
-                            'tipo': 'recomendacao',
-                            'severidade': 'INFO',
-                            'mensagem': f"Consider adding: {regra.estrutura_b.nome} - {regra.descricao}",
-                            'estrutura_sugerida': regra.estrutura_b.nome
-                        })
-        
-        # Add jurisdiction-specific alerts
-        alertas_jurisdicao = _get_alertas_jurisdicao(estruturas_presentes)
-        alertas.extend(alertas_jurisdicao)
-        
-        return JsonResponse({
-            'valido': len(erros) == 0,
-            'erros': erros,
-            'alertas': alertas,
-            'sugestoes': sugestoes,
-            'total_estruturas': len(estruturas_ids)
-        })
-    
-    except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
-    except Exception as e:
-        logger.error(f"Error in validar_configuracao: {str(e)}")
-        return JsonResponse({'error': 'Validation failed'}, status=500)
-
-
-def _verificar_condicoes(condicoes, elementos):
-    """
-    Helper function to verify conditional requirements.
-    """
-    # Implement specific condition checking logic here
-    # This is a placeholder for more complex conditional logic
-    return True
-
-
-def _get_alertas_jurisdicao(estruturas):
-    """
-    Get jurisdiction-specific alerts for the given structures.
-    """
-    alertas = []
-    
-    # Get alerts that apply to any of the structures
-    alertas_aplicaveis = AlertaJurisdicao.objects.filter(
-        ativo=True,
-        estruturas_aplicaveis__in=estruturas
-    ).distinct()
-    
-    for alerta in alertas_aplicaveis:
-        alertas.append({
-            'tipo': 'jurisdicao',
-            'severidade': 'WARNING' if alerta.prioridade >= 4 else 'INFO',
-            'mensagem': f"{alerta.get_jurisdicao_display()}: {alerta.titulo}",
-            'descricao': alerta.descricao,
-            'jurisdicao': alerta.jurisdicao
-        })
-    
-    return alertas
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def salvar_template(request):
-    """
-    Saves a new template with complete configuration information.
-    """
-    try:
-        data = json.loads(request.body)
-        
-        nome = data.get('nome')
-        if not nome:
-            return JsonResponse({'error': 'Template name is required'}, status=400)
-        
-        categoria = data.get('categoria', 'GENERAL')
-        descricao = data.get('descricao', '')
-        configuracao = data.get('configuracao', {})
-        publico_alvo = data.get('publico_alvo', '')
-        casos_uso = data.get('casos_uso', '')
-        complexidade_template = data.get('complexidade_template', 'BASIC')
-        
-        # Calculate total cost and time
-        elementos = configuracao.get('elementos', [])
-        custo_total = 0
-        tempo_total = 0
-        
-        for elemento in elementos:
-            estrutura_id = elemento.get('estrutura_id')
-            if estrutura_id:
-                try:
-                    estrutura = Estrutura.objects.get(id=estrutura_id)
-                    custo_total += float(estrutura.custo_base)
-                    tempo_total = max(tempo_total, estrutura.tempo_implementacao)
-                except Estrutura.DoesNotExist:
-                    continue
-        
-        template = Template.objects.create(
-            nome=nome,
-            categoria=categoria,
-            complexidade_template=complexidade_template,
-            descricao=descricao,
-            configuracao=configuracao,
-            custo_total=custo_total,
-            tempo_total_implementacao=tempo_total,
-            publico_alvo=publico_alvo,
-            casos_uso=casos_uso
-        )
-        
-        return JsonResponse({
-            'status': 'success',
-            'template_id': template.id,
-            'message': 'Template saved successfully'
-        })
-    
-    except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
-    except Exception as e:
-        logger.error(f"Error in salvar_template: {str(e)}")
-        return JsonResponse({'error': 'Failed to save template'}, status=500)
-
-
-def carregar_template(request, template_id):
-    """
-    Loads a specific template configuration.
-    """
-    try:
-        template = get_object_or_404(Template, id=template_id, ativo=True)
-        template.incrementar_uso()
-        
-        return JsonResponse({
-            'id': template.id,
-            'nome': template.nome,
-            'categoria': template.categoria,
-            'descricao': template.descricao,
-            'configuracao': template.configuracao,
-            'custo_total': float(template.custo_total),
-            'tempo_total': template.tempo_total_implementacao,
-            'publico_alvo': template.publico_alvo,
-            'casos_uso': template.casos_uso,
-            'uso_count': template.uso_count
-        })
-    
-    except Exception as e:
-        logger.error(f"Error in carregar_template: {str(e)}")
-        return JsonResponse({'error': 'Failed to load template'}, status=500)
-
-
-def templates_json(request):
-    """
-    API endpoint returning available templates.
-    """
-    try:
-        categoria = request.GET.get('categoria')
-        search = request.GET.get('search')
-        
         templates = Template.objects.filter(ativo=True)
-        
-        if categoria and categoria != 'ALL':
-            templates = templates.filter(categoria=categoria)
-        
-        if search:
-            templates = templates.filter(
-                Q(nome__icontains=search) |
-                Q(descricao__icontains=search) |
-                Q(publico_alvo__icontains=search)
-            )
-        
-        templates = templates.order_by('-uso_count', 'nome')
-        
         data = []
+        
         for template in templates:
+            # Handle configuracao field (already a dict if JSONField)
+            configuracao = template.configuracao if template.configuracao else {}
+            
             data.append({
                 'id': template.id,
                 'nome': template.nome,
                 'categoria': template.categoria,
-                'categoria_display': template.get_categoria_display(),
                 'complexidade_template': template.complexidade_template,
                 'descricao': template.descricao,
+                'configuracao': configuracao,
                 'custo_total': float(template.custo_total),
                 'tempo_total_implementacao': template.tempo_total_implementacao,
                 'uso_count': template.uso_count,
-                'publico_alvo': template.publico_alvo,
-                'casos_uso': template.casos_uso
+                'publico_alvo': template.publico_alvo
             })
         
         return JsonResponse(data, safe=False)
     
     except Exception as e:
-        logger.error(f"Error in templates_json: {str(e)}")
-        return JsonResponse({'error': 'Failed to load templates'}, status=500)
-
+        return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def salvar_configuracao(request):
-    """
-    Saves a user configuration (not a template).
-    """
+def api_calcular_custos(request):
+    """API endpoint for advanced cost calculation."""
     try:
         data = json.loads(request.body)
+        elementos = data.get('elementos', [])
+        cenario = data.get('cenario', 'basic')
+        incluir_analise_risco = data.get('incluir_analise_risco', True)
         
-        nome = data.get('nome')
-        if not nome:
-            return JsonResponse({'error': 'Configuration name is required'}, status=400)
+        if not elementos:
+            return JsonResponse({'error': 'No structures provided'}, status=400)
         
-        descricao = data.get('descricao', '')
-        configuracao = data.get('configuracao', {})
-        
-        # Calculate estimates
-        elementos = configuracao.get('elementos', [])
-        custo_estimado = 0
-        tempo_estimado = 0
-        
+        # Convert elementos to structure data format
+        estruturas_data = []
         for elemento in elementos:
-            estrutura_id = elemento.get('estrutura_id')
+            estrutura_id = elemento.get('estrutura', {}).get('id')
             if estrutura_id:
                 try:
                     estrutura = Estrutura.objects.get(id=estrutura_id)
-                    custo_estimado += float(estrutura.custo_base)
-                    tempo_estimado = max(tempo_estimado, estrutura.tempo_implementacao)
+                    estruturas_data.append({
+                        'id': estrutura.id,
+                        'tipo': estrutura.tipo,
+                        'custo_base': float(estrutura.custo_base),
+                        'custo_manutencao': float(estrutura.custo_manutencao),
+                        'complexidade': estrutura.complexidade,
+                        'tempo_implementacao': estrutura.tempo_implementacao,
+                        'nivel_confidencialidade': estrutura.nivel_confidencialidade
+                    })
                 except Estrutura.DoesNotExist:
                     continue
         
-        config_salva = ConfiguracaoSalva.objects.create(
+        # Calculate costs using advanced calculator
+        resultado = calculate_configuration_cost_django(
+            estruturas_data, 
+            cenario, 
+            incluir_analise_risco
+        )
+        
+        return JsonResponse(resultado)
+    
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_validar_configuracao(request):
+    """API endpoint for advanced configuration validation."""
+    try:
+        data = json.loads(request.body)
+        elementos = data.get('elementos', [])
+        analise_custos = data.get('analise_custos')
+        
+        if not elementos:
+            return JsonResponse({'error': 'No structures provided'}, status=400)
+        
+        # Convert elementos to structure data format
+        estruturas_data = []
+        for elemento in elementos:
+            estrutura_id = elemento.get('estrutura', {}).get('id')
+            if estrutura_id:
+                try:
+                    estrutura = Estrutura.objects.get(id=estrutura_id)
+                    estruturas_data.append({
+                        'id': estrutura.id,
+                        'tipo': estrutura.tipo,
+                        'custo_base': float(estrutura.custo_base),
+                        'custo_manutencao': float(estrutura.custo_manutencao),
+                        'complexidade': estrutura.complexidade,
+                        'tempo_implementacao': estrutura.tempo_implementacao,
+                        'nivel_confidencialidade': estrutura.nivel_confidencialidade
+                    })
+                except Estrutura.DoesNotExist:
+                    continue
+        
+        # Validate configuration using advanced validator
+        resultado = validate_configuration_django(estruturas_data, analise_custos)
+        
+        return JsonResponse(resultado)
+    
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@require_http_methods(["GET"])
+def api_regras_validacao(request):
+    """API endpoint to get validation rules."""
+    try:
+        regras = RegraValidacao.objects.filter(ativa=True)
+        data = []
+        
+        for regra in regras:
+            data.append({
+                'id': regra.id,
+                'estrutura_origem': regra.estrutura_origem.tipo if regra.estrutura_origem else None,
+                'estrutura_destino': regra.estrutura_destino.tipo if regra.estrutura_destino else None,
+                'tipo_regra': regra.tipo_regra,
+                'nivel_severidade': regra.nivel_severidade,
+                'mensagem': regra.mensagem,
+                'descricao': regra.descricao,
+                'recomendacao': regra.recomendacao
+            })
+        
+        return JsonResponse(data, safe=False)
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@require_http_methods(["GET"])
+def api_alertas_jurisdicao(request):
+    """API endpoint to get jurisdiction alerts."""
+    try:
+        alertas = AlertaJurisdicao.objects.filter(ativo=True)
+        data = []
+        
+        for alerta in alertas:
+            data.append({
+                'id': alerta.id,
+                'jurisdicao': alerta.jurisdicao,
+                'tipo_alerta': alerta.tipo_alerta,
+                'titulo': alerta.titulo,
+                'mensagem': alerta.mensagem,
+                'nivel_prioridade': alerta.nivel_prioridade,
+                'data_inicio': alerta.data_inicio.isoformat() if alerta.data_inicio else None,
+                'data_fim': alerta.data_fim.isoformat() if alerta.data_fim else None
+            })
+        
+        return JsonResponse(data, safe=False)
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_salvar_configuracao(request):
+    """API endpoint to save a configuration."""
+    try:
+        data = json.loads(request.body)
+        nome = data.get('nome')
+        descricao = data.get('descricao', '')
+        elementos = data.get('elementos', [])
+        
+        if not nome or not elementos:
+            return JsonResponse({'error': 'Name and elements are required'}, status=400)
+        
+        # Create configuration
+        configuracao = ConfiguracaoSalva.objects.create(
             nome=nome,
             descricao=descricao,
-            configuracao=configuracao,
-            custo_estimado=custo_estimado,
-            tempo_estimado=tempo_estimado
+            configuracao_json=json.dumps(elementos),
+            custo_total=data.get('custo_total', 0),
+            tempo_total=data.get('tempo_total', 0)
         )
         
         return JsonResponse({
-            'status': 'success',
-            'config_id': config_salva.id,
+            'id': configuracao.id,
             'message': 'Configuration saved successfully'
         })
     
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON data'}, status=400)
     except Exception as e:
-        logger.error(f"Error in salvar_configuracao: {str(e)}")
-        return JsonResponse({'error': 'Failed to save configuration'}, status=500)
+        return JsonResponse({'error': str(e)}, status=500)
 
+@require_http_methods(["GET"])
+def api_configuracoes_salvas(request):
+    """API endpoint to get saved configurations."""
+    try:
+        configuracoes = ConfiguracaoSalva.objects.all().order_by('-data_criacao')
+        data = []
+        
+        for config in configuracoes:
+            try:
+                elementos = json.loads(config.configuracao_json) if config.configuracao_json else []
+            except json.JSONDecodeError:
+                elementos = []
+            
+            data.append({
+                'id': config.id,
+                'nome': config.nome,
+                'descricao': config.descricao,
+                'elementos': elementos,
+                'custo_total': float(config.custo_total),
+                'tempo_total': config.tempo_total,
+                'data_criacao': config.data_criacao.isoformat(),
+                'data_modificacao': config.data_modificacao.isoformat()
+            })
+        
+        return JsonResponse(data, safe=False)
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
-def admin_estruturas(request):
-    """
-    Simple admin interface for editing structures.
-    """
-    search = request.GET.get('search', '')
-    tipo_filter = request.GET.get('tipo', '')
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_aplicar_template(request):
+    """API endpoint to apply a template."""
+    try:
+        data = json.loads(request.body)
+        template_id = data.get('template_id')
+        
+        if not template_id:
+            return JsonResponse({'error': 'Template ID is required'}, status=400)
+        
+        try:
+            template = Template.objects.get(id=template_id, ativo=True)
+        except Template.DoesNotExist:
+            return JsonResponse({'error': 'Template not found'}, status=404)
+        
+        # Parse estruturas_ids
+        try:
+            estruturas_ids = json.loads(template.estruturas_ids) if template.estruturas_ids else []
+        except json.JSONDecodeError:
+            estruturas_ids = []
+        
+        # Get structures
+        estruturas = Estrutura.objects.filter(id__in=estruturas_ids, ativo=True)
+        elementos = []
+        
+        for i, estrutura in enumerate(estruturas):
+            elementos.append({
+                'id': f'template_{template_id}_{estrutura.id}_{i}',
+                'estrutura': {
+                    'id': estrutura.id,
+                    'tipo': estrutura.tipo,
+                    'nome': estrutura.nome,
+                    'descricao': estrutura.descricao,
+                    'custo_base': float(estrutura.custo_base),
+                    'custo_manutencao': float(estrutura.custo_manutencao),
+                    'tempo_implementacao': estrutura.tempo_implementacao,
+                    'complexidade': estrutura.complexidade,
+                    'nivel_confidencialidade': estrutura.nivel_confidencialidade,
+                    'implicacoes_fiscais': estrutura.implicacoes_fiscais,
+                    'vantagens': estrutura.vantagens.split('\n') if estrutura.vantagens else [],
+                    'desvantagens': estrutura.desvantagens.split('\n') if estrutura.desvantagens else [],
+                    'documentos_necessarios': estrutura.documentos_necessarios.split('\n') if estrutura.documentos_necessarios else []
+                },
+                'position': {
+                    'x': 100 + (i % 3) * 250,  # Arrange in grid
+                    'y': 100 + (i // 3) * 150
+                }
+            })
+        
+        # Increment template usage
+        template.usos += 1
+        template.save()
+        
+        return JsonResponse({
+            'elementos': elementos,
+            'template': {
+                'id': template.id,
+                'nome': template.nome,
+                'descricao': template.descricao,
+                'setor': template.setor
+            }
+        })
     
-    estruturas = Estrutura.objects.all()
-    
-    if search:
-        estruturas = estruturas.filter(
-            Q(nome__icontains=search) |
-            Q(descricao__icontains=search)
-        )
-    
-    if tipo_filter:
-        estruturas = estruturas.filter(tipo=tipo_filter)
-    
-    estruturas = estruturas.order_by('nome')
-    
-    # Pagination
-    paginator = Paginator(estruturas, 20)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-    
-    # Get available types for filter
-    tipos_disponiveis = Estrutura.TIPOS_ESTRUTURA
-    
-    context = {
-        'page_obj': page_obj,
-        'search': search,
-        'tipo_filter': tipo_filter,
-        'tipos_disponiveis': tipos_disponiveis,
-        'page_title': 'Structure Administration'
-    }
-    
-    return render(request, 'admin_estruturas.html', context)
-
-
-def estrutura_detail(request, estrutura_id):
-    """
-    Detailed view of a specific structure.
-    """
-    estrutura = get_object_or_404(Estrutura, id=estrutura_id)
-    
-    # Get related validation rules
-    regras_como_a = RegraValidacao.objects.filter(estrutura_a=estrutura, ativo=True)
-    regras_como_b = RegraValidacao.objects.filter(estrutura_b=estrutura, ativo=True)
-    
-    # Get applicable alerts
-    alertas = AlertaJurisdicao.objects.filter(
-        estruturas_aplicaveis=estrutura,
-        ativo=True
-    ).order_by('-prioridade')
-    
-    context = {
-        'estrutura': estrutura,
-        'regras_como_a': regras_como_a,
-        'regras_como_b': regras_como_b,
-        'alertas': alertas,
-        'page_title': f'Structure Details: {estrutura.nome}'
-    }
-    
-    return render(request, 'estrutura_detail.html', context)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
