@@ -13,11 +13,13 @@
     window.djangoData = {
         csrfToken: '{{ csrf_token }}',
         apiUrls: {
-            estruturas: '{% url "estruturas_app:api_estruturas" %}',
-            templates: '{% url "estruturas_app:api_templates" %}',
-            validar: '{% url "estruturas_app:api_validar_configuracao" %}',
-            salvarTemplate: '{% url "estruturas_app:api_salvar_configuracao" %}',
-            salvarConfiguracao: '{% url "estruturas_app:api_salvar_configuracao" %}'
+            estruturas: '{% url "estruturas:api_estruturas" %}',
+            templates: '{% url "estruturas:api_templates" %}',
+            calcularCustos: '{% url "estruturas:api_calcular_custos" %}',
+            validarConfiguracao: '{% url "estruturas:api_validar_configuracao" %}',
+            salvarConfiguracao: '{% url "estruturas:api_salvar_configuracao" %}',
+            aplicarTemplate: '{% url "estruturas:api_aplicar_template" %}',
+            generatePdf: '{% url "estruturas:api_generate_pdf" %}'
         }
     };
 </script>

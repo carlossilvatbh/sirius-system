@@ -165,11 +165,11 @@
                 <!-- Navigation Links -->
                 <div class="hidden md:block">
                     <div class="ml-10 flex items-baseline space-x-4">
-                        <a href="{% url 'estruturas_app:canvas_principal' %}" 
+                        <a href="{% url 'estruturas:canvas_principal' %}"
                            class="text-gray-700 hover:text-sirius-blue px-3 py-2 rounded-md text-sm font-medium transition-colors">
                             Canvas
                         </a>
-                        <a href="{% url 'estruturas_app:admin_estruturas' %}" 
+                        <a href="{% url 'estruturas:admin_estruturas' %}"
                            class="text-gray-700 hover:text-sirius-blue px-3 py-2 rounded-md text-sm font-medium transition-colors">
                             Structures
                         </a>
@@ -278,6 +278,9 @@
         
         window.csrfToken = getCookie('csrftoken');
     </script>
+    
+    <!-- html2canvas for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     
     <!-- SIRIUS Advanced Canvas -->
     <script src="{% static 'js/canvas-advanced.js' %}"></script>

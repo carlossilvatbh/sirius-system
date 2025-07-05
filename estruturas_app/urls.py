@@ -1,7 +1,7 @@
 from django.urls import path
 from . import views
 
-app_name = 'estruturas_app'
+app_name = 'estruturas'
 
 urlpatterns = [
     # Main views
@@ -18,5 +18,6 @@ urlpatterns = [
     path('api/salvar-configuracao/', views.api_salvar_configuracao, name='api_salvar_configuracao'),
     path('api/configuracoes-salvas/', views.api_configuracoes_salvas, name='api_configuracoes_salvas'),
     path('api/aplicar-template/', views.api_aplicar_template, name='api_aplicar_template'),
+    path('api/generate-pdf/', views.api_generate_pdf, name='api_generate_pdf'),
 ]
 

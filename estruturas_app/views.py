@@ -1,11 +1,12 @@
 from django.shortcuts import render
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 import json
 from .models import Estrutura, RegraValidacao, Template, ConfiguracaoSalva, AlertaJurisdicao
 from .cost_calculator import calculate_configuration_cost_django
 from .validation_engine import validate_configuration_django
+from .pdf_generator import generate_pdf_report
 
 def canvas_principal(request):
     """Main canvas interface for building legal structures."""
@@ -353,4 +354,82 @@ def api_aplicar_template(request):
         return JsonResponse({'error': 'Invalid JSON data'}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_generate_pdf(request):
+    """Generate PDF report for a configuration."""
+    try:
+        data = json.loads(request.body)
+        
+        # Get configuration data
+        configuration_data = data.get('configuration', {})
+        canvas_image_base64 = data.get('canvas_image', None)
+        
+        # Validate configuration data
+        if not configuration_data:
+            return JsonResponse({'error': 'Configuration data is required'}, status=400)
+        
+        # Enrich configuration data with structure details
+        elementos = configuration_data.get('elementos', [])
+        enriched_elementos = []
+        
+        for elemento in elementos:
+            estrutura_id = elemento.get('estrutura_id')
+            if estrutura_id:
+                try:
+                    estrutura = Estrutura.objects.get(id=estrutura_id)
+                    elemento_enriched = elemento.copy()
+                    elemento_enriched['estrutura'] = {
+                        'id': estrutura.id,
+                        'nome': estrutura.nome,
+                        'tipo': estrutura.tipo,
+                        'descricao': estrutura.descricao,
+                        'custo_base': float(estrutura.custo_base),
+                        'custo_manutencao': float(estrutura.custo_manutencao),
+                        'tempo_implementacao': estrutura.tempo_implementacao,
+                        'complexidade': estrutura.complexidade,
+                        'nivel_confidencialidade': estrutura.nivel_confidencialidade,
+                        'impacto_tributario_eua': estrutura.impacto_tributario_eua,
+                        'impacto_tributario_brasil': estrutura.impacto_tributario_brasil,
+                        'impacto_tributario_outros': estrutura.impacto_tributario_outros,
+                        'protecao_patrimonial': estrutura.protecao_patrimonial,
+                        'impacto_privacidade': estrutura.impacto_privacidade,
+                        'facilidade_banking': estrutura.facilidade_banking,
+                        'documentacao_necessaria': estrutura.documentacao_necessaria,
+                        'formularios_obrigatorios_eua': estrutura.formularios_obrigatorios_eua,
+                        'formularios_obrigatorios_brasil': estrutura.formularios_obrigatorios_brasil
+                    }
+                    enriched_elementos.append(elemento_enriched)
+                except Estrutura.DoesNotExist:
+                    continue
+        
+        # Update configuration with enriched data
+        enriched_configuration = configuration_data.copy()
+        enriched_configuration['elementos'] = enriched_elementos
+        
+        # Calculate costs and analysis
+        try:
+            cost_result = calculate_configuration_cost_django(enriched_configuration)
+            enriched_configuration.update(cost_result)
+        except Exception as e:
+            # If cost calculation fails, continue without it
+            pass
+        
+        # Generate PDF
+        pdf_buffer = generate_pdf_report(enriched_configuration, canvas_image_base64)
+        
+        # Create HTTP response with PDF
+        response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="sirius_structure_report.pdf"'
+        response['Content-Length'] = len(pdf_buffer.getvalue())
+        
+        return response
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': f'PDF generation failed: {str(e)}'}, status=500)
 

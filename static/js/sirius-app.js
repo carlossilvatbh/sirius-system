@@ -823,55 +823,70 @@ const SiriusApp = {
             try {
                 this.loading = true;
                 
-                // Capture canvas
-                const canvas = await html2canvas(this.$refs.canvasContainer, {
-                    backgroundColor: '#ffffff',
-                    scale: 2
-                });
+                // Capture canvas as image
+                const canvasElement = document.getElementById('canvas-container');
+                let canvasImageBase64 = null;
                 
-                // Create PDF
-                const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF('l', 'mm', 'a4'); // landscape
-                
-                // Add title
-                pdf.setFontSize(20);
-                pdf.text('SIRIUS - Legal Structure Configuration', 20, 20);
-                
-                // Add canvas image
-                const imgData = canvas.toDataURL('image/png');
-                const imgWidth = 250;
-                const imgHeight = (canvas.height * imgWidth) / canvas.width;
-                pdf.addImage(imgData, 'PNG', 20, 30, imgWidth, Math.min(imgHeight, 140));
-                
-                // Add configuration details
-                let yPosition = Math.max(180, 30 + imgHeight + 10);
-                
-                pdf.setFontSize(14);
-                pdf.text(`Total Cost (${this.cenarioPrecificacao}): ${this.formatCurrency(this.custoTotalComCenario)}`, 20, yPosition);
-                pdf.text(`Implementation Time: ${this.tempoTotal} days`, 20, yPosition + 10);
-                pdf.text(`Number of Structures: ${this.elementos.length}`, 20, yPosition + 20);
-                
-                // Add structure list
-                pdf.setFontSize(12);
-                pdf.text('Included Structures:', 20, yPosition + 35);
-                
-                let listY = yPosition + 45;
-                this.elementos.forEach((elemento, index) => {
-                    if (listY > 280) { // New page if needed
-                        pdf.addPage();
-                        listY = 20;
+                if (canvasElement) {
+                    // Use html2canvas to capture the canvas
+                    if (typeof html2canvas !== 'undefined') {
+                        const canvas = await html2canvas(canvasElement, {
+                            backgroundColor: '#ffffff',
+                            scale: 2,
+                            useCORS: true,
+                            allowTaint: true
+                        });
+                        canvasImageBase64 = canvas.toDataURL('image/png');
                     }
-                    pdf.text(`• ${elemento.estrutura.nome} - ${this.formatCurrency(elemento.estrutura.custo_base)}`, 25, listY);
-                    listY += 8;
+                }
+                
+                // Prepare configuration data
+                const configurationData = {
+                    name: this.configuracaoAtual.nome || 'Custom Configuration',
+                    elementos: this.elementosCanvas.map(elemento => ({
+                        ...elemento,
+                        estrutura_id: elemento.estrutura.id
+                    })),
+                    custo_total: this.custoTotal,
+                    tempo_total: this.tempoTotal,
+                    cenario: this.cenarioSelecionado,
+                    analise_detalhada: this.analiseDetalhada
+                };
+                
+                // Send request to generate PDF
+                const response = await fetch(window.djangoData.apiUrls.generatePdf, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': window.djangoData.csrfToken
+                    },
+                    body: JSON.stringify({
+                        configuration: configurationData,
+                        canvas_image: canvasImageBase64
+                    })
                 });
                 
-                // Save PDF
-                pdf.save(`sirius_configuration_${Date.now()}.pdf`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 
-                this.showNotification('PDF generated successfully!', 'success');
+                // Download the PDF
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = 'sirius_structure_report.pdf';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                this.showNotification('Professional PDF report generated successfully!', 'success');
+                
             } catch (error) {
                 console.error('Error generating PDF:', error);
-                this.showNotification('Failed to generate PDF', 'error');
+                this.showNotification('Failed to generate PDF report', 'error');
             } finally {
                 this.loading = false;
             }
