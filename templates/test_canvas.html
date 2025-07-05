@@ -1,15 +1,17 @@
 {% extends 'base.html' %}
-{% load static %}
 
-{% block title %}SIRIUS Canvas - Legal Structure Designer{% endblock %}
+{% block title %}Test Canvas{% endblock %}
 
 {% block content %}
-<div id="sirius-app">
-    <!-- Vue.js will mount here and handle all content -->
+<div id="test-app">
+    <h1>{{ message }}</h1>
+    <button @click="changeMessage">Change Message</button>
+    <p>Count: {{ count }}</p>
+    <button @click="count++">Increment</button>
 </div>
 
-<!-- Pass Django data to Vue.js -->
 <script>
+    // Test basic Vue functionality
     window.djangoData = {
         csrfToken: '{{ csrf_token }}',
         apiUrls: {
@@ -22,10 +24,21 @@
             generatePdf: '{% url "estruturas:api_gerar_pdf" %}'
         }
     };
+    
+    const { createApp } = Vue;
+    
+    createApp({
+        data() {
+            return {
+                message: 'Vue.js is working!',
+                count: 0
+            }
+        },
+        methods: {
+            changeMessage() {
+                this.message = 'Message changed at ' + new Date().toLocaleTimeString();
+            }
+        }
+    }).mount('#test-app');
 </script>
 {% endblock %}
-
-{% block extra_js %}
-<script src="{% static 'js/sirius-app-simple.js' %}"></script>
-{% endblock %}
-

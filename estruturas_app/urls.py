@@ -6,6 +6,7 @@ app_name = 'estruturas'
 urlpatterns = [
     # Main views
     path('', views.canvas_principal, name='canvas_principal'),
+    path('test/', views.test_canvas, name='test_canvas'),
     path('admin-estruturas/', views.admin_estruturas, name='admin_estruturas'),
     path('estrutura/<int:estrutura_id>/', views.estrutura_detail, name='estrutura_detail'),
     

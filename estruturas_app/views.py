@@ -8,12 +8,16 @@ from .cost_calculator import calculate_configuration_cost_django
 from .validation_engine import validate_configuration_django
 from .pdf_generator import generate_pdf_report
 
+def test_canvas(request):
+    """Test canvas for debugging."""
+    return render(request, 'test_canvas.html')
+
 def canvas_principal(request):
     """Main canvas interface for building legal structures."""
     context = {
         'page_title': 'SIRIUS Canvas - Legal Structure Designer'
     }
-    return render(request, 'canvas_vue.html', context)
+    return render(request, 'canvas_clean.html', context)
 
 def admin_estruturas(request):
     """Admin interface for managing structures."""
