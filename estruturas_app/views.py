@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -18,11 +18,34 @@ def canvas_principal(request):
 def admin_estruturas(request):
     """Admin interface for managing structures."""
     estruturas = Estrutura.objects.all()
+    
+    # Handle search
+    search = request.GET.get('search', '')
+    if search:
+        estruturas = estruturas.filter(nome__icontains=search)
+    
+    # Handle type filter
+    tipo = request.GET.get('tipo', '')
+    if tipo:
+        estruturas = estruturas.filter(tipo=tipo)
+    
     context = {
         'estruturas': estruturas,
-        'page_title': 'Structure Administration'
+        'page_title': 'Structure Administration',
+        'search': search,
+        'tipo': tipo
     }
     return render(request, 'admin_estruturas.html', context)
+
+def estrutura_detail(request, estrutura_id):
+    """View for structure details."""
+    estrutura = get_object_or_404(Estrutura, id=estrutura_id)
+    context = {
+        'estrutura': estrutura,
+        'page_title': f'Structure Details - {estrutura.nome}'
+    }
+    return render(request, 'estrutura_detail.html', context)
+
 
 # API Endpoints
 

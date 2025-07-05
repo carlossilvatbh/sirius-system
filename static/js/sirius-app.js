@@ -175,6 +175,15 @@ const SiriusApp = {
                         </button>
                         
                         <button 
+                            @click="toggleConnectionMode"
+                            class="btn btn-secondary tooltip"
+                            :class="{ 'btn-primary': connectingMode }"
+                            data-tooltip="Connect Structures (C)"
+                        >
+                            <i class="fas fa-link"></i>
+                        </button>
+                        
+                        <button 
                             @click="fitCanvasToContent"
                             class="btn btn-secondary tooltip"
                             :disabled="elementos.length === 0"
@@ -232,6 +241,12 @@ const SiriusApp = {
             
             <!-- Canvas Container -->
             <div class="flex-1 relative bg-gray-50">
+                <!-- Connection Mode Indicator -->
+                <div v-if="connectingMode" class="connecting-mode-indicator">
+                    <i class="fas fa-link mr-2"></i>
+                    Connection Mode: {{ connectionStart ? 'Select target structure' : 'Select source structure' }}
+                </div>
+                
                 <div 
                     ref="canvasContainer"
                     class="canvas-container w-full h-full"
@@ -239,8 +254,55 @@ const SiriusApp = {
                     @drop="handleDrop"
                     @click="deselecionarTudo"
                 >
+                    <!-- Connections SVG Layer -->
+                    <svg 
+                        class="absolute inset-0 w-full h-full pointer-events-none"
+                        style="z-index: 1;"
+                    >
+                        <defs>
+                            <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                                refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#3B82F6" />
+                            </marker>
+                        </defs>
+                        
+                        <!-- Existing connections -->
+                        <g v-for="connection in connections" :key="connection.id">
+                            <path 
+                                :d="getConnectionPath(connection)"
+                                stroke="#3B82F6"
+                                stroke-width="2"
+                                fill="none"
+                                marker-end="url(#arrowhead)"
+                                class="connection-path"
+                            />
+                            <text 
+                                :x="getConnectionMidpoint(connection).x"
+                                :y="getConnectionMidpoint(connection).y - 5"
+                                text-anchor="middle"
+                                class="connection-label"
+                                font-size="12"
+                                fill="#374151"
+                            >
+                                {{ connection.label || 'Connection' }}
+                            </text>
+                        </g>
+                        
+                        <!-- Temporary connection while drawing -->
+                        <path 
+                            v-if="connectionStart && connectionEnd"
+                            :d="getTempConnectionPath()"
+                            stroke="#3B82F6"
+                            stroke-width="2"
+                            stroke-dasharray="5,5"
+                            fill="none"
+                            marker-end="url(#arrowhead)"
+                            class="temp-connection"
+                        />
+                    </svg>
+                    
                     <!-- Canvas Elements -->
-                    <div class="relative w-full h-full p-4 sm:p-8">
+                    <div class="relative w-full h-full p-4 sm:p-8" style="z-index: 2;">
                         <div 
                             v-for="elemento in elementos" 
                             :key="elemento.id"
@@ -252,8 +314,13 @@ const SiriusApp = {
                             }"
                             @mousedown="iniciarArrastar(elemento, $event)"
                             @touchstart="iniciarArrastar(elemento, $event)"
-                            @click.stop="selecionarElemento(elemento)"
-                            :class="{ 'selected': elementoSelecionado?.id === elemento.id }"
+                            @click.stop="handleElementClick(elemento)"
+                            :class="{ 
+                                'selected': elementoSelecionado?.id === elemento.id,
+                                'connecting': connectingMode,
+                                'connection-source': connectionStart?.id === elemento.id,
+                                'connection-target': connectionEnd?.id === elemento.id
+                            }"
                         >
                             <div class="flex justify-between items-start mb-2">
                                 <div class="text-sm font-bold text-gray-900">{{ elemento.estrutura.nome }}</div>
@@ -514,6 +581,12 @@ const SiriusApp = {
             draggedElement: null,
             isDragging: false,
             dragOffset: { x: 0, y: 0 },
+            
+            // Connections between structures
+            connections: [],
+            connectingMode: false,
+            connectionStart: null,
+            connectionEnd: null,
             
             // Validation
             validacao: {
@@ -796,8 +869,12 @@ const SiriusApp = {
         iniciarDrag(estrutura, event) {
             this.draggedElement = estrutura;
             
-            // Set drag image for better UX
+            // Set drag data
             if (event.dataTransfer) {
+                event.dataTransfer.setData('estrutura', JSON.stringify(estrutura));
+                event.dataTransfer.effectAllowed = 'copy';
+                
+                // Set drag image for better UX
                 const dragImage = event.target.cloneNode(true);
                 dragImage.style.transform = 'rotate(5deg)';
                 dragImage.style.opacity = '0.8';
@@ -818,7 +895,19 @@ const SiriusApp = {
             event.preventDefault();
             
             try {
-                const estruturaData = JSON.parse(event.dataTransfer.getData('estrutura'));
+                let estruturaData;
+                
+                // Try to get data from dataTransfer first
+                try {
+                    estruturaData = JSON.parse(event.dataTransfer.getData('estrutura'));
+                } catch (e) {
+                    // Fallback to draggedElement if dataTransfer fails
+                    if (this.draggedElement) {
+                        estruturaData = this.draggedElement;
+                    } else {
+                        throw new Error('No structure data available');
+                    }
+                }
                 
                 // Calculate position relative to canvas
                 const canvasRect = this.$refs.canvasContainer.getBoundingClientRect();
@@ -835,10 +924,15 @@ const SiriusApp = {
                 };
                 
                 this.elementos.push(novoElemento);
+                this.saveToHistory();
                 this.calcularTotais();
                 await this.validarConfiguracao();
                 
                 this.showNotification(`Added ${estruturaData.nome} to canvas`, 'success');
+                
+                // Clear dragged element
+                this.draggedElement = null;
+                
             } catch (error) {
                 console.error('Error handling drop:', error);
                 this.showNotification('Failed to add structure to canvas', 'error');
@@ -855,6 +949,14 @@ const SiriusApp = {
             }
         },
         
+        handleElementClick(elemento) {
+            if (this.connectingMode) {
+                this.handleConnectionClick(elemento);
+            } else {
+                this.selecionarElemento(elemento);
+            }
+        },
+        
         selecionarElemento(elemento) {
             this.elementoSelecionado = elemento;
             this.estruturaSelecionada = elemento.estrutura;
@@ -864,329 +966,149 @@ const SiriusApp = {
             }
         },
         
-        removerElemento(elementoId) {
-            const index = this.elementos.findIndex(el => el.id === elementoId);
-            if (index !== -1) {
-                const elemento = this.elementos[index];
-                this.elementos.splice(index, 1);
-                this.calcularTotais();
-                this.validarConfiguracao();
-                
-                if (this.elementoSelecionado?.id === elementoId) {
-                    this.elementoSelecionado = null;
-                }
-                
-                this.showNotification(`Removed ${elemento.estrutura.nome}`, 'info');
+        // Connection Management
+        toggleConnectionMode() {
+            this.connectingMode = !this.connectingMode;
+            
+            if (this.connectingMode) {
+                this.showNotification('Connection mode enabled. Click two structures to connect them.', 'info');
+                this.connectionStart = null;
+                this.connectionEnd = null;
+            } else {
+                this.showNotification('Connection mode disabled.', 'info');
+                this.connectionStart = null;
+                this.connectionEnd = null;
             }
         },
         
-        // Dragging for canvas elements
-        iniciarArrastar(elemento, event) {
-            this.draggedElement = elemento;
-            this.isDragging = true;
+        handleConnectionClick(elemento) {
+            if (!this.connectionStart) {
+                // First click - set source
+                this.connectionStart = elemento;
+                this.showNotification(`Selected ${elemento.estrutura.nome} as connection source.`, 'info');
+            } else if (this.connectionStart.id === elemento.id) {
+                // Same element clicked - deselect
+                this.connectionStart = null;
+                this.showNotification('Connection source deselected.', 'info');
+            } else {
+                // Second click - create connection
+                this.connectionEnd = elemento;
+                this.createConnection();
+            }
+        },
+        
+        createConnection() {
+            if (!this.connectionStart || !this.connectionEnd) return;
             
-            const rect = event.target.getBoundingClientRect();
-            this.dragOffset = {
-                x: event.clientX - rect.left,
-                y: event.clientY - rect.top
+            // Check if connection already exists
+            const existingConnection = this.connections.find(conn => 
+                (conn.from === this.connectionStart.id && conn.to === this.connectionEnd.id) ||
+                (conn.from === this.connectionEnd.id && conn.to === this.connectionStart.id)
+            );
+            
+            if (existingConnection) {
+                this.showNotification('Connection already exists between these structures.', 'warning');
+                this.connectionStart = null;
+                this.connectionEnd = null;
+                return;
+            }
+            
+            // Create new connection
+            const connection = {
+                id: `connection_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                from: this.connectionStart.id,
+                to: this.connectionEnd.id,
+                label: this.getConnectionLabel(this.connectionStart.estrutura, this.connectionEnd.estrutura),
+                type: 'flow'
             };
             
-            event.preventDefault();
-        },
-        
-        handleMouseMove(event) {
-            if (this.isDragging && this.draggedElement) {
-                const canvasRect = this.$refs.canvasContainer.getBoundingClientRect();
-                const x = event.clientX - canvasRect.left - this.dragOffset.x;
-                const y = event.clientY - canvasRect.top - this.dragOffset.y;
-                
-                this.draggedElement.position = {
-                    x: Math.max(0, Math.min(x, canvasRect.width - 200)),
-                    y: Math.max(0, Math.min(y, canvasRect.height - 100))
-                };
-            }
-        },
-        
-        handleMouseUp() {
-            this.isDragging = false;
-            this.draggedElement = null;
-        },
-        
-        // Calculations
-        async calcularTotais() {
-            if (this.elementos.length === 0) {
-                this.custoTotal = 0;
-                this.tempoTotal = 0;
-                this.validacao = {
-                    valido: true,
-                    erros: [],
-                    alertas: [],
-                    sugestoes: []
-                };
-                return;
-            }
+            this.connections.push(connection);
+            this.saveToHistory();
             
-            try {
-                // Calculate advanced costs
-                const costResponse = await fetch('/api/calcular-custos/', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': window.csrfToken
-                    },
-                    body: JSON.stringify({
-                        elementos: this.elementos,
-                        cenario: this.cenarioSelecionado,
-                        incluir_analise_risco: true
-                    })
-                });
-                
-                if (costResponse.ok) {
-                    const costData = await costResponse.json();
-                    this.custoTotal = costData.risk_adjusted_cost || 0;
-                    this.tempoTotal = costData.time_to_implementation || 0;
-                    this.analiseDetalhada = costData;
-                    
-                    // Perform advanced validation
-                    const validationResponse = await fetch('/api/validar-configuracao/', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': window.csrfToken
-                        },
-                        body: JSON.stringify({
-                            elementos: this.elementos,
-                            analise_custos: costData
-                        })
-                    });
-                    
-                    if (validationResponse.ok) {
-                        const validationData = await validationResponse.json();
-                        this.validacao = {
-                            valido: validationData.is_valid,
-                            erros: validationData.results.filter(r => r.level === 'error').map(r => r.message),
-                            alertas: validationData.results.filter(r => r.level === 'warning').map(r => r.message),
-                            sugestoes: validationData.results.filter(r => r.level === 'info').map(r => r.message),
-                            detalhes: validationData
-                        };
-                    }
-                } else {
-                    // Fallback to simple calculation
-                    this.calcularTotaisSimples();
-                }
-                
-            } catch (error) {
-                console.error('Error calculating costs:', error);
-                // Fallback to simple calculation
-                this.calcularTotaisSimples();
+            this.showNotification(`Connected ${this.connectionStart.estrutura.nome} to ${this.connectionEnd.estrutura.nome}`, 'success');
+            
+            // Reset connection state
+            this.connectionStart = null;
+            this.connectionEnd = null;
+        },
+        
+        getConnectionLabel(estrutura1, estrutura2) {
+            // Generate intelligent connection labels based on structure types
+            const type1 = estrutura1.tipo;
+            const type2 = estrutura2.tipo;
+            
+            if (type1.includes('DAO') && type2.includes('VAULT')) {
+                return 'Asset Flow';
+            } else if (type1.includes('FOUNDATION') && type2.includes('CORP')) {
+                return 'Ownership';
+            } else if (type1.includes('FUND') && type2.includes('TOKEN')) {
+                return 'Investment';
+            } else {
+                return 'Connection';
             }
         },
         
-        calcularTotaisSimples() {
-            // Simple fallback calculation
-            let custoTotal = 0;
-            let tempoMaximo = 0;
+        getConnectionPath(connection) {
+            const fromElement = this.elementos.find(el => el.id === connection.from);
+            const toElement = this.elementos.find(el => el.id === connection.to);
             
-            this.elementos.forEach(elemento => {
-                const estrutura = elemento.estrutura;
-                let custo = estrutura.custo_base;
-                
-                // Apply scenario multiplier
-                const multiplicador = this.cenarioMultiplicadores[this.cenarioSelecionado] || 1;
-                custo *= multiplicador;
-                
-                custoTotal += custo;
-                tempoMaximo = Math.max(tempoMaximo, estrutura.tempo_implementacao);
-            });
+            if (!fromElement || !toElement) return '';
             
-            this.custoTotal = custoTotal;
-            this.tempoTotal = tempoMaximo;
+            const fromCenter = this.getElementCenter(fromElement);
+            const toCenter = this.getElementCenter(toElement);
+            
+            // Create curved connection path
+            const dx = toCenter.x - fromCenter.x;
+            const dy = toCenter.y - fromCenter.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            const controlOffset = Math.min(distance * 0.3, 100);
+            const controlX1 = fromCenter.x + controlOffset;
+            const controlY1 = fromCenter.y;
+            const controlX2 = toCenter.x - controlOffset;
+            const controlY2 = toCenter.y;
+            
+            return `M ${fromCenter.x} ${fromCenter.y} C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${toCenter.x} ${toCenter.y}`;
         },
         
-        // Validation
-        async validarConfiguracao() {
-            if (this.elementos.length === 0) {
-                this.validacao = {
-                    valido: true,
-                    erros: [],
-                    alertas: [],
-                    sugestoes: []
-                };
-                return;
-            }
+        getTempConnectionPath() {
+            if (!this.connectionStart || !this.connectionEnd) return '';
             
-            try {
-                const response = await fetch(window.djangoData.apiUrls.validar, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': window.djangoData.csrfToken
-                    },
-                    body: JSON.stringify({
-                        configuracao: {
-                            elementos: this.elementos.map(el => ({
-                                estrutura_id: el.estrutura_id,
-                                position: el.position
-                            }))
-                        }
-                    })
-                });
-                
-                if (!response.ok) {
-                    throw new Error('Validation request failed');
-                }
-                
-                this.validacao = await response.json();
-            } catch (error) {
-                console.error('Error validating configuration:', error);
-                this.showNotification('Validation failed', 'error');
-            }
+            const fromCenter = this.getElementCenter(this.connectionStart);
+            const toCenter = this.getElementCenter(this.connectionEnd);
+            
+            return `M ${fromCenter.x} ${fromCenter.y} L ${toCenter.x} ${toCenter.y}`;
         },
         
-        // Template Management
-        async salvarTemplate() {
-            const nome = prompt('Template name:');
-            if (!nome) return;
+        getConnectionMidpoint(connection) {
+            const fromElement = this.elementos.find(el => el.id === connection.from);
+            const toElement = this.elementos.find(el => el.id === connection.to);
             
-            const categoria = prompt('Category (TECH/REAL_ESTATE/TRADING/FAMILY_OFFICE/GENERAL):') || 'GENERAL';
-            const descricao = prompt('Description (optional):') || '';
+            if (!fromElement || !toElement) return { x: 0, y: 0 };
             
-            try {
-                const response = await fetch(window.djangoData.apiUrls.salvarTemplate, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': window.djangoData.csrfToken
-                    },
-                    body: JSON.stringify({
-                        nome,
-                        categoria,
-                        descricao,
-                        configuracao: {
-                            elementos: this.elementos,
-                            conexoes: this.conexoes
-                        }
-                    })
-                });
-                
-                if (!response.ok) {
-                    throw new Error('Failed to save template');
-                }
-                
-                const result = await response.json();
-                this.showNotification('Template saved successfully!', 'success');
-                
-                // Reload templates
-                await this.carregarDados();
-            } catch (error) {
-                console.error('Error saving template:', error);
-                this.showNotification('Failed to save template', 'error');
-            }
+            const fromCenter = this.getElementCenter(fromElement);
+            const toCenter = this.getElementCenter(toElement);
+            
+            return {
+                x: (fromCenter.x + toCenter.x) / 2,
+                y: (fromCenter.y + toCenter.y) / 2
+            };
         },
         
-        async carregarTemplate(templateId) {
-            try {
-                const response = await fetch(`/api/template/${templateId}/`);
-                
-                if (!response.ok) {
-                    throw new Error('Failed to load template');
-                }
-                
-                const template = await response.json();
-                
-                this.elementos = template.configuracao.elementos || [];
-                this.conexoes = template.configuracao.conexoes || [];
-                
-                // Ensure all elements have the full structure data
-                for (let elemento of this.elementos) {
-                    const estrutura = this.estruturas.find(e => e.id === elemento.estrutura_id);
-                    if (estrutura) {
-                        elemento.estrutura = estrutura;
-                    }
-                }
-                
-                this.calcularTotais();
-                await this.validarConfiguracao();
-                
-                this.showNotification(`Loaded template: ${template.nome}`, 'success');
-            } catch (error) {
-                console.error('Error loading template:', error);
-                this.showNotification('Failed to load template', 'error');
-            }
+        getElementCenter(elemento) {
+            const width = this.isMobile ? 180 : 220;
+            const height = 120; // Approximate height of canvas element
+            
+            return {
+                x: elemento.position.x + width / 2,
+                y: elemento.position.y + height / 2
+            };
         },
         
-        // PDF Generation
-        async gerarPDF() {
-            try {
-                this.loading = true;
-                
-                // Capture canvas as image
-                const canvasElement = document.getElementById('canvas-container');
-                let canvasImageBase64 = null;
-                
-                if (canvasElement) {
-                    // Use html2canvas to capture the canvas
-                    if (typeof html2canvas !== 'undefined') {
-                        const canvas = await html2canvas(canvasElement, {
-                            backgroundColor: '#ffffff',
-                            scale: 2,
-                            useCORS: true,
-                            allowTaint: true
-                        });
-                        canvasImageBase64 = canvas.toDataURL('image/png');
-                    }
-                }
-                
-                // Prepare configuration data
-                const configurationData = {
-                    name: this.configuracaoAtual.nome || 'Custom Configuration',
-                    elementos: this.elementosCanvas.map(elemento => ({
-                        ...elemento,
-                        estrutura_id: elemento.estrutura.id
-                    })),
-                    custo_total: this.custoTotal,
-                    tempo_total: this.tempoTotal,
-                    cenario: this.cenarioSelecionado,
-                    analise_detalhada: this.analiseDetalhada
-                };
-                
-                // Send request to generate PDF
-                const response = await fetch(window.djangoData.apiUrls.generatePdf, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': window.djangoData.csrfToken
-                    },
-                    body: JSON.stringify({
-                        configuration: configurationData,
-                        canvas_image: canvasImageBase64
-                    })
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                // Download the PDF
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = 'sirius_structure_report.pdf';
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                
-                this.showNotification('Professional PDF report generated successfully!', 'success');
-                
-            } catch (error) {
-                console.error('Error generating PDF:', error);
-                this.showNotification('Failed to generate PDF report', 'error');
-            } finally {
-                this.loading = false;
-            }
+        removeConnection(connectionId) {
+            this.connections = this.connections.filter(conn => conn.id !== connectionId);
+            this.saveToHistory();
+            this.showNotification('Connection removed', 'info');
         },
         
         // Canvas Management
@@ -1195,9 +1117,12 @@ const SiriusApp = {
             
             if (confirm('Are you sure you want to clear the canvas?')) {
                 this.elementos = [];
-                this.conexoes = [];
+                this.connections = [];
                 this.elementoSelecionado = null;
                 this.estruturaSelecionada = null;
+                this.connectingMode = false;
+                this.connectionStart = null;
+                this.connectionEnd = null;
                 this.calcularTotais();
                 this.validacao = {
                     valido: true,
@@ -1206,53 +1131,52 @@ const SiriusApp = {
                     sugestoes: []
                 };
                 
-                if (this.advancedCanvas) {
-                    this.advancedCanvas.saveState();
-                }
-                
                 this.showNotification('Canvas cleared', 'info');
+                this.saveToHistory();
             }
         },
         
-        // Advanced Canvas Controls
-        resetCanvasView() {
-            if (this.advancedCanvas) {
-                this.advancedCanvas.resetView();
+        // Method to handle clicking outside to deselect
+        deselecionarTudo() {
+            if (this.connectingMode) {
+                this.connectionStart = null;
+                this.connectionEnd = null;
+            } else {
+                this.elementoSelecionado = null;
+                this.estruturaSelecionada = null;
             }
         },
         
-        fitCanvasToContent() {
-            if (this.advancedCanvas) {
-                this.advancedCanvas.fitToContent();
-            }
-        },
-        
-        toggleGridSnap() {
-            this.snapToGrid = !this.snapToGrid;
-            if (this.advancedCanvas) {
-                this.advancedCanvas.snapToGrid = this.snapToGrid;
-            }
-            this.showNotification(
-                `Grid snap ${this.snapToGrid ? 'enabled' : 'disabled'}`,
-                'info'
-            );
-        },
-        
-        // Event Handlers
+        // Keyboard shortcuts
         handleKeydown(event) {
-            // Keyboard shortcuts
             if (event.ctrlKey || event.metaKey) {
                 switch (event.key) {
+                    case 'z':
+                        event.preventDefault();
+                        this.undoAction();
+                        break;
+                    case 'y':
+                        event.preventDefault();
+                        this.redoAction();
+                        break;
                     case 's':
                         event.preventDefault();
                         if (this.elementos.length > 0) {
-                            this.salvarTemplate();
+                            this.salvarConfiguracao();
                         }
                         break;
-                    case 'p':
-                        event.preventDefault();
-                        if (this.elementos.length > 0) {
-                            this.gerarPDF();
+                }
+            } else {
+                switch (event.key) {
+                    case 'c':
+                        this.toggleConnectionMode();
+                        break;
+                    case 'g':
+                        this.toggleGridSnap();
+                        break;
+                    case 'Escape':
+                        if (this.connectingMode) {
+                            this.toggleConnectionMode();
                         }
                         break;
                     case 'Delete':
@@ -1266,87 +1190,33 @@ const SiriusApp = {
             }
         },
         
-        handleResize() {
-            // Handle window resize if needed
-            this.$nextTick(() => {
-                // Recalculate canvas dimensions if necessary
-            });
+        // Other missing methods
+        toggleGridSnap() {
+            this.snapToGrid = !this.snapToGrid;
+            this.showNotification(`Grid snap ${this.snapToGrid ? 'enabled' : 'disabled'}`, 'info');
         },
         
-        // Utility Methods
-        formatCurrency(amount) {
-            return new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'USD'
-            }).format(amount || 0);
+        fitCanvasToContent() {
+            if (this.elementos.length === 0) return;
+            this.showNotification('Fit to content - feature coming soon', 'info');
         },
         
-        // Helper methods for UI
-        getComplexityClass(complexity) {
-            if (complexity <= 2) return 'success';
-            if (complexity <= 3) return 'warning';
-            return 'error';
-        },
-        
-        // Enhanced cost calculation
-        recalcularCustos() {
-            this.custoTotal = this.custoTotalSetup;
+        removerElemento(elementId) {
+            this.elementos = this.elementos.filter(el => el.id !== elementId);
             
-            // Trigger validation
-            this.validarConfiguracao();
-        },
-        
-        validarConfiguracao() {
-            // Enhanced validation logic
-            const errors = [];
-            const warnings = [];
+            // Remove any connections involving this element
+            this.connections = this.connections.filter(conn => 
+                conn.from !== elementId && conn.to !== elementId
+            );
             
-            if (this.elementos.length === 0) {
-                warnings.push('No structures added to canvas');
-            }
-            
-            if (this.elementos.length > 10) {
-                warnings.push('Large number of structures may increase complexity');
-            }
-            
-            this.validacao = {
-                valido: errors.length === 0,
-                erros: errors,
-                alertas: warnings,
-                sugestoes: []
-            };
+            this.elementoSelecionado = null;
+            this.estruturaSelecionada = null;
+            this.calcularTotais();
+            this.saveToHistory();
+            this.showNotification('Element removed', 'info');
         },
-    },
-    
-    // Watchers
-    watch: {
-        elementos: {
-            handler(newVal) {
-                this.saveToHistory();
-                this.recalcularCustos();
-            },
-            deep: true
-        },
-        
-        searchQuery(newVal) {
-            this.handleSearchInput();
-        }
-    },
-    
-    // Cleanup
-    beforeUnmount() {
-        document.removeEventListener('keydown', this.handleKeydown);
-        window.removeEventListener('resize', this.handleResize);
-        document.removeEventListener('mousemove', this.handleMouseMove);
-        document.removeEventListener('mouseup', this.handleMouseUp);
-        
-        // Cleanup advanced canvas
-        if (this.advancedCanvas) {
-            this.advancedCanvas.destroy();
-        }
     }
 };
 
-// Mount the Vue app
-createApp(SiriusApp).mount('#app');
+createApp(SiriusApp).mount('#sirius-app');
 

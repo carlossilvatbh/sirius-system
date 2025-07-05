@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ estrutura.nome }} - Structure Details - SIRIUS{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-6 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <nav class="flex" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'estruturas:canvas_principal' %}" class="text-gray-700 hover:text-gray-900">
+                        <i class="fas fa-home"></i>
+                        <span class="sr-only">Home</span>
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400"></i>
+                        <a href="{% url 'estruturas:admin_estruturas' %}" class="ml-1 text-gray-700 hover:text-gray-900 md:ml-2">
+                            Administration
+                        </a>
+                    </div>
+                </li>
+                <li aria-current="page">
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400"></i>
+                        <span class="ml-1 text-gray-500 md:ml-2">{{ estrutura.nome }}</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+        
+        <div class="mt-4">
+            <h1 class="text-3xl font-bold text-gray-900">{{ estrutura.nome }}</h1>
+            <p class="mt-2 text-gray-600">{{ estrutura.descricao }}</p>
+        </div>
+    </div>
+
+    <!-- Structure Information -->
+    <div class="bg-white shadow rounded-lg divide-y divide-gray-200">
+        <!-- Basic Information -->
+        <div class="px-6 py-4">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Basic Information</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Type</label>
+                    <p class="mt-1 text-sm text-gray-900">{{ estrutura.tipo }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Status</label>
+                    <p class="mt-1">
+                        {% if estrutura.ativo %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Active
+                            </span>
+                        {% else %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                Inactive
+                            </span>
+                        {% endif %}
+                    </p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Complexity</label>
+                    <p class="mt-1 text-sm text-gray-900">{{ estrutura.complexidade }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Confidentiality Level</label>
+                    <p class="mt-1 text-sm text-gray-900">{{ estrutura.nivel_confidencialidade }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Implementation Time</label>
+                    <p class="mt-1 text-sm text-gray-900">{{ estrutura.tempo_implementacao }} days</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Asset Protection</label>
+                    <p class="mt-1 text-sm text-gray-900">{{ estrutura.protecao_patrimonial }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Financial Information -->
+        <div class="px-6 py-4">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Financial Information</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Base Cost</label>
+                    <p class="mt-1 text-sm text-gray-900">${{ estrutura.custo_base|floatformat:2 }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Maintenance Cost</label>
+                    <p class="mt-1 text-sm text-gray-900">${{ estrutura.custo_manutencao|floatformat:2 }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tax Impact -->
+        <div class="px-6 py-4">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Tax Impact</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">USA</label>
+                    <p class="mt-1 text-sm text-gray-900">{{ estrutura.impacto_tributario_eua }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Brazil</label>
+                    <p class="mt-1 text-sm text-gray-900">{{ estrutura.impacto_tributario_brasil }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Other Jurisdictions</label>
+                    <p class="mt-1 text-sm text-gray-900">{{ estrutura.impacto_tributario_outros }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Documentation -->
+        {% if estrutura.documentacao_necessaria %}
+        <div class="px-6 py-4">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Required Documentation</h3>
+            <div class="prose max-w-none">
+                <pre class="bg-gray-50 p-4 rounded-md text-sm">{{ estrutura.documentacao_necessaria }}</pre>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Forms -->
+        <div class="px-6 py-4">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Required Forms</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">USA Forms</label>
+                    <p class="mt-1 text-sm text-gray-900">{{ estrutura.formularios_obrigatorios_eua|default:"None" }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Brazil Forms</label>
+                    <p class="mt-1 text-sm text-gray-900">{{ estrutura.formularios_obrigatorios_brasil|default:"None" }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="px-6 py-4">
+            <div class="flex justify-between items-center">
+                <a href="{% url 'estruturas:admin_estruturas' %}" 
+                   class="btn-secondary">
+                    <i class="fas fa-arrow-left"></i>
+                    Back to Administration
+                </a>
+                
+                <a href="{% url 'estruturas:canvas_principal' %}" 
+                   class="btn-primary">
+                    <i class="fas fa-plus"></i>
+                    Add to Canvas
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
