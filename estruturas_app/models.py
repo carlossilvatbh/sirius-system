@@ -1,7 +1,8 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
-import json
-
+from django.core.exceptions import ValidationError
+from django.utils import timezone
+from datetime import date
 
 class Estrutura(models.Model):
     """
@@ -746,4 +747,280 @@ class Product(models.Model):
             return self.get_custo_total_calculado()
         else:
             return self.custo_manual or 0
+
+
+class PersonalizedProduct(models.Model):
+    """
+    Produto personalizado que representa Products ou Legal Structures associadas a UBOs
+    Refatoração do modelo ConfiguracaoSalva existente
+    """
+    
+    STATUS_CHOICES = [
+        ('DRAFT', 'Draft'),
+        ('ACTIVE', 'Active'),
+        ('INACTIVE', 'Inactive'),
+        ('ARCHIVED', 'Archived'),
+    ]
+    
+    # Informações básicas
+    nome = models.CharField(
+        max_length=200,
+        help_text="Nome do produto personalizado"
+    )
+    descricao = models.TextField(
+        blank=True,
+        help_text="Descrição detalhada do produto personalizado"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='DRAFT',
+        help_text="Status atual do produto personalizado"
+    )
+    
+    # Relacionamentos base (um dos dois deve ser preenchido)
+    base_product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="Product base para este produto personalizado"
+    )
+    base_structure = models.ForeignKey(
+        Estrutura,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="Legal Structure base para este produto personalizado"
+    )
+    
+    # Relacionamentos com UBOs
+    ubos = models.ManyToManyField(
+        UBO,
+        through='PersonalizedProductUBO',
+        help_text="UBOs associados a este produto personalizado"
+    )
+    
+    # Versionamento
+    version_number = models.PositiveIntegerField(
+        default=1,
+        help_text="Número da versão (incrementado automaticamente)"
+    )
+    parent_version = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='child_versions',
+        help_text="Versão anterior deste produto personalizado"
+    )
+    
+    # Configuração personalizada
+    configuracao_personalizada = models.JSONField(
+        default=dict,
+        help_text="Configurações específicas deste produto personalizado"
+    )
+    
+    # Custos personalizados
+    custo_personalizado = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Custo personalizado (sobrescreve cálculo automático)"
+    )
+    
+    # Observações e notas
+    observacoes = models.TextField(
+        blank=True,
+        help_text="Observações e notas específicas"
+    )
+    
+    # Metadados
+    ativo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Personalized Product"
+        verbose_name_plural = "Personalized Products"
+        ordering = ['-version_number', '-created_at']
+        indexes = [
+            models.Index(fields=['base_product']),
+            models.Index(fields=['base_structure']),
+            models.Index(fields=['status']),
+            models.Index(fields=['version_number']),
+            models.Index(fields=['ativo']),
+        ]
+    
+    def __str__(self):
+        base_name = ""
+        if self.base_product:
+            base_name = self.base_product.commercial_name
+        elif self.base_structure:
+            base_name = self.base_structure.nome
+        
+        return f"{self.nome} (v{self.version_number}) - {base_name}"
+    
+    def clean(self):
+        """Validações customizadas"""
+        super().clean()
+        
+        # Validar que apenas um dos campos base está preenchido
+        if self.base_product and self.base_structure:
+            raise ValidationError(
+                "Produto personalizado deve ter apenas um base (Product ou Structure)"
+            )
+        
+        if not self.base_product and not self.base_structure:
+            raise ValidationError(
+                "Produto personalizado deve ter um base (Product ou Structure)"
+            )
+    
+    def get_base_object(self):
+        """Retorna o objeto base (Product ou Structure)"""
+        return self.base_product or self.base_structure
+    
+    def get_base_type(self):
+        """Retorna o tipo do objeto base"""
+        if self.base_product:
+            return "Product"
+        elif self.base_structure:
+            return "Structure"
+        return None
+    
+    def get_custo_total(self):
+        """Calcula custo total considerando personalização"""
+        if self.custo_personalizado:
+            return self.custo_personalizado
+        
+        base_obj = self.get_base_object()
+        if hasattr(base_obj, 'get_custo_total_primeiro_ano'):
+            return base_obj.get_custo_total_primeiro_ano()
+        elif hasattr(base_obj, 'get_custo_total_primeiro_ano'):
+            return base_obj.get_custo_total_primeiro_ano()
+        
+        return 0
+    
+    def create_new_version(self, changes_description=""):
+        """Cria nova versão deste produto personalizado"""
+        new_version = PersonalizedProduct.objects.create(
+            nome=self.nome,
+            descricao=self.descricao,
+            status='DRAFT',
+            base_product=self.base_product,
+            base_structure=self.base_structure,
+            version_number=self.version_number + 1,
+            parent_version=self,
+            configuracao_personalizada=self.configuracao_personalizada.copy(),
+            custo_personalizado=self.custo_personalizado,
+            observacoes=f"{self.observacoes}\n\n--- Versão {self.version_number + 1} ---\n{changes_description}".strip()
+        )
+        
+        # Copiar relacionamentos UBO
+        for pp_ubo in self.personalizedproductubo_set.all():
+            PersonalizedProductUBO.objects.create(
+                personalized_product=new_version,
+                ubo=pp_ubo.ubo,
+                ownership_percentage=pp_ubo.ownership_percentage,
+                role=pp_ubo.role,
+                data_inicio=pp_ubo.data_inicio,
+                ativo=pp_ubo.ativo
+            )
+        
+        return new_version
+    
+    def get_ubos_ativos(self):
+        """Retorna UBOs ativos associados"""
+        return self.ubos.filter(
+            personalizedproductubo__ativo=True
+        ).distinct()
+    
+    def get_total_ownership_percentage(self):
+        """Calcula percentual total de propriedade"""
+        total = self.personalizedproductubo_set.filter(
+            ativo=True
+        ).aggregate(
+            total=models.Sum('ownership_percentage')
+        )['total'] or 0
+        
+        return total
+
+
+class PersonalizedProductUBO(models.Model):
+    """
+    Modelo intermediário para relacionamento PersonalizedProduct-UBO
+    """
+    
+    ROLE_CHOICES = [
+        ('OWNER', 'Owner'),
+        ('BENEFICIARY', 'Beneficiary'),
+        ('DIRECTOR', 'Director'),
+        ('SHAREHOLDER', 'Shareholder'),
+        ('TRUSTEE', 'Trustee'),
+        ('OTHER', 'Other'),
+    ]
+    
+    personalized_product = models.ForeignKey(
+        PersonalizedProduct,
+        on_delete=models.CASCADE,
+        help_text="Produto personalizado"
+    )
+    ubo = models.ForeignKey(
+        UBO,
+        on_delete=models.CASCADE,
+        help_text="UBO associado"
+    )
+    ownership_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0.01), MaxValueValidator(100.00)],
+        help_text="Percentual de propriedade (opcional)"
+    )
+    role = models.CharField(
+        max_length=20,
+        choices=ROLE_CHOICES,
+        default='OWNER',
+        help_text="Papel do UBO neste produto"
+    )
+    data_inicio = models.DateField(
+        help_text="Data de início da associação"
+    )
+    data_fim = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Data de fim da associação (opcional)"
+    )
+    observacoes = models.TextField(
+        blank=True,
+        help_text="Observações específicas desta associação"
+    )
+    ativo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "Personalized Product UBO"
+        verbose_name_plural = "Personalized Product UBOs"
+        unique_together = ['personalized_product', 'ubo', 'role']
+        indexes = [
+            models.Index(fields=['personalized_product', 'ativo']),
+            models.Index(fields=['ubo', 'ativo']),
+            models.Index(fields=['data_inicio']),
+        ]
+    
+    def __str__(self):
+        percentage_str = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
+        return f"{self.ubo.nome_completo} - {self.get_role_display()}{percentage_str}"
+    
+    def clean(self):
+        """Validações customizadas"""
+        super().clean()
+        
+        # Validar que data_fim é posterior a data_inicio
+        if self.data_fim and self.data_inicio and self.data_fim <= self.data_inicio:
+            raise ValidationError({
+                'data_fim': 'Data de fim deve ser posterior à data de início'
+            })
 

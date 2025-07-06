@@ -2,7 +2,7 @@ from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from datetime import date
-from .models import UBO, Successor, Product
+from .models import UBO, Successor, Product, PersonalizedProduct, PersonalizedProductUBO
 
 
 class UBOModelTest(TestCase):
@@ -671,4 +671,421 @@ class ProductModelTest(TestCase):
         product2 = Product.objects.create(**product_data_json_str)
         # Django automaticamente converte string JSON para dict
         self.assertIsInstance(product2.configuracao, (dict, str))
+
+
+class PersonalizedProductModelTest(TestCase):
+    """
+    Testes para o modelo PersonalizedProduct
+    """
+    
+    def setUp(self):
+        """Configuração inicial para os testes"""
+        # Criar UBO de teste
+        self.ubo = UBO.objects.create(
+            nome_completo='João Silva Santos',
+            data_nascimento=date(1980, 1, 15),
+            nacionalidade='BR',
+            tin='CPF12345678901'
+        )
+        
+        # Criar Product de teste
+        self.product = Product.objects.create(
+            nome='Product Teste',
+            categoria='TECH',
+            complexidade_template='SIMPLES',
+            descricao='Product para testes',
+            commercial_name='Commercial Product Test',
+            master_agreement_url='https://example.com/agreement',
+            configuracao={'test': 'config'},
+            tempo_total_implementacao=30,
+            custo_automatico=True
+        )
+        
+        # Dados básicos para PersonalizedProduct
+        self.pp_data = {
+            'nome': 'Produto Personalizado Teste',
+            'descricao': 'Descrição do produto personalizado',
+            'status': 'DRAFT',
+            'base_product': self.product
+        }
+    
+    def test_create_personalized_product_valid(self):
+        """Testa criação de PersonalizedProduct com dados válidos"""
+        pp = PersonalizedProduct.objects.create(**self.pp_data)
+        self.assertEqual(pp.nome, 'Produto Personalizado Teste')
+        self.assertEqual(pp.status, 'DRAFT')
+        self.assertEqual(pp.version_number, 1)
+        self.assertTrue(pp.ativo)
+        self.assertEqual(pp.base_product, self.product)
+    
+    def test_personalized_product_str_representation(self):
+        """Testa representação string do PersonalizedProduct"""
+        pp = PersonalizedProduct.objects.create(**self.pp_data)
+        expected = f"{pp.nome} (v{pp.version_number}) - {self.product.commercial_name}"
+        self.assertEqual(str(pp), expected)
+    
+    def test_clean_validation_both_bases(self):
+        """Testa validação quando ambos base_product e base_structure estão preenchidos"""
+        from estruturas_app.models import Estrutura
+        
+        # Criar uma estrutura de teste
+        estrutura = Estrutura.objects.create(
+            nome='Estrutura Teste',
+            tipo='WYOMING_LLC',
+            descricao='Estrutura para testes',
+            custo_base=1000.00,
+            custo_manutencao=500.00,
+            tempo_implementacao=30,
+            complexidade=2,
+            impacto_tributario_eua='Impacto EUA teste',
+            impacto_tributario_brasil='Impacto Brasil teste',
+            nivel_confidencialidade=3,
+            protecao_patrimonial=3,
+            impacto_privacidade='Impacto privacidade teste',
+            facilidade_banking=3,
+            documentacao_necessaria='Documentação teste'
+        )
+        
+        pp = PersonalizedProduct(
+            nome='Teste',
+            base_product=self.product,
+            base_structure=estrutura
+        )
+        
+        with self.assertRaises(ValidationError):
+            pp.clean()
+    
+    def test_clean_validation_no_base(self):
+        """Testa validação quando nenhum base está preenchido"""
+        pp = PersonalizedProduct(nome='Teste')
+        
+        with self.assertRaises(ValidationError):
+            pp.clean()
+    
+    def test_get_base_object_product(self):
+        """Testa get_base_object quando base é Product"""
+        pp = PersonalizedProduct.objects.create(**self.pp_data)
+        self.assertEqual(pp.get_base_object(), self.product)
+    
+    def test_get_base_type_product(self):
+        """Testa get_base_type quando base é Product"""
+        pp = PersonalizedProduct.objects.create(**self.pp_data)
+        self.assertEqual(pp.get_base_type(), "Product")
+    
+    def test_get_base_type_structure(self):
+        """Testa get_base_type quando base é Structure"""
+        from estruturas_app.models import Estrutura
+        
+        estrutura = Estrutura.objects.create(
+            nome='Estrutura Teste',
+            tipo='WYOMING_LLC',
+            descricao='Estrutura para testes',
+            custo_base=1000.00,
+            custo_manutencao=500.00,
+            tempo_implementacao=30,
+            complexidade=2,
+            impacto_tributario_eua='Impacto EUA teste',
+            impacto_tributario_brasil='Impacto Brasil teste',
+            nivel_confidencialidade=3,
+            protecao_patrimonial=3,
+            impacto_privacidade='Impacto privacidade teste',
+            facilidade_banking=3,
+            documentacao_necessaria='Documentação teste'
+        )
+        
+        pp_data = self.pp_data.copy()
+        pp_data['base_product'] = None
+        pp_data['base_structure'] = estrutura
+        
+        pp = PersonalizedProduct.objects.create(**pp_data)
+        self.assertEqual(pp.get_base_type(), "Structure")
+    
+    def test_get_custo_total_personalizado(self):
+        """Testa cálculo de custo com valor personalizado"""
+        pp_data = self.pp_data.copy()
+        pp_data['custo_personalizado'] = 5000.00
+        
+        pp = PersonalizedProduct.objects.create(**pp_data)
+        self.assertEqual(pp.get_custo_total(), 5000.00)
+    
+    def test_get_custo_total_automatico(self):
+        """Testa cálculo de custo automático"""
+        pp = PersonalizedProduct.objects.create(**self.pp_data)
+        # Como o Product não tem método get_custo_total_primeiro_ano implementado,
+        # deve retornar 0
+        self.assertEqual(pp.get_custo_total(), 0)
+    
+    def test_create_new_version(self):
+        """Testa criação de nova versão"""
+        pp = PersonalizedProduct.objects.create(**self.pp_data)
+        
+        # Adicionar UBO ao produto original
+        PersonalizedProductUBO.objects.create(
+            personalized_product=pp,
+            ubo=self.ubo,
+            ownership_percentage=100.00,
+            role='OWNER',
+            data_inicio=date.today()
+        )
+        
+        new_version = pp.create_new_version("Teste de nova versão")
+        
+        self.assertEqual(new_version.version_number, 2)
+        self.assertEqual(new_version.parent_version, pp)
+        self.assertEqual(new_version.status, 'DRAFT')
+        self.assertEqual(new_version.personalizedproductubo_set.count(), 1)
+    
+    def test_get_ubos_ativos(self):
+        """Testa busca de UBOs ativos"""
+        pp = PersonalizedProduct.objects.create(**self.pp_data)
+        
+        # Adicionar UBO ativo
+        PersonalizedProductUBO.objects.create(
+            personalized_product=pp,
+            ubo=self.ubo,
+            ownership_percentage=100.00,
+            role='OWNER',
+            data_inicio=date.today(),
+            ativo=True
+        )
+        
+        ubos_ativos = pp.get_ubos_ativos()
+        self.assertEqual(ubos_ativos.count(), 1)
+        self.assertIn(self.ubo, ubos_ativos)
+    
+    def test_get_total_ownership_percentage(self):
+        """Testa cálculo de percentual total de propriedade"""
+        pp = PersonalizedProduct.objects.create(**self.pp_data)
+        
+        # Adicionar UBOs com percentuais
+        PersonalizedProductUBO.objects.create(
+            personalized_product=pp,
+            ubo=self.ubo,
+            ownership_percentage=60.00,
+            role='OWNER',
+            data_inicio=date.today()
+        )
+        
+        # Criar segundo UBO
+        ubo2 = UBO.objects.create(
+            nome_completo='Maria Santos',
+            data_nascimento=date(1985, 5, 20),
+            nacionalidade='BR',
+            tin='CPF98765432109'
+        )
+        
+        PersonalizedProductUBO.objects.create(
+            personalized_product=pp,
+            ubo=ubo2,
+            ownership_percentage=40.00,
+            role='SHAREHOLDER',
+            data_inicio=date.today()
+        )
+        
+        total = pp.get_total_ownership_percentage()
+        self.assertEqual(total, 100.00)
+    
+    def test_status_choices(self):
+        """Testa choices de status"""
+        pp = PersonalizedProduct.objects.create(**self.pp_data)
+        
+        # Testar todos os status válidos
+        valid_statuses = ['DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED']
+        for status in valid_statuses:
+            pp.status = status
+            pp.save()
+            pp.refresh_from_db()
+            self.assertEqual(pp.status, status)
+    
+    def test_configuracao_personalizada_default(self):
+        """Testa valor padrão da configuração personalizada"""
+        pp = PersonalizedProduct.objects.create(**self.pp_data)
+        self.assertEqual(pp.configuracao_personalizada, {})
+    
+    def test_configuracao_personalizada_custom(self):
+        """Testa configuração personalizada customizada"""
+        custom_config = {'custom_field': 'custom_value', 'number': 123}
+        pp_data = self.pp_data.copy()
+        pp_data['configuracao_personalizada'] = custom_config
+        
+        pp = PersonalizedProduct.objects.create(**pp_data)
+        self.assertEqual(pp.configuracao_personalizada, custom_config)
+    
+    def test_version_number_default(self):
+        """Testa valor padrão do número da versão"""
+        pp = PersonalizedProduct.objects.create(**self.pp_data)
+        self.assertEqual(pp.version_number, 1)
+    
+    def test_ativo_default(self):
+        """Testa valor padrão do campo ativo"""
+        pp = PersonalizedProduct.objects.create(**self.pp_data)
+        self.assertTrue(pp.ativo)
+    
+    def test_meta_verbose_names(self):
+        """Testa nomes verbose da Meta class"""
+        self.assertEqual(PersonalizedProduct._meta.verbose_name, "Personalized Product")
+        self.assertEqual(PersonalizedProduct._meta.verbose_name_plural, "Personalized Products")
+    
+    def test_ordering(self):
+        """Testa ordenação padrão"""
+        # Criar múltiplos produtos com versões diferentes
+        pp1 = PersonalizedProduct.objects.create(
+            nome='Produto 1',
+            base_product=self.product,
+            version_number=1
+        )
+        
+        pp2 = PersonalizedProduct.objects.create(
+            nome='Produto 2',
+            base_product=self.product,
+            version_number=2
+        )
+        
+        products = list(PersonalizedProduct.objects.all())
+        # Deve estar ordenado por version_number decrescente
+        self.assertEqual(products[0], pp2)
+        self.assertEqual(products[1], pp1)
+
+
+class PersonalizedProductUBOModelTest(TestCase):
+    """
+    Testes para o modelo PersonalizedProductUBO
+    """
+    
+    def setUp(self):
+        """Configuração inicial para os testes"""
+        # Criar UBO de teste
+        self.ubo = UBO.objects.create(
+            nome_completo='João Silva Santos',
+            data_nascimento=date(1980, 1, 15),
+            nacionalidade='BR',
+            tin='CPF12345678901'
+        )
+        
+        # Criar Product de teste
+        self.product = Product.objects.create(
+            nome='Product Teste',
+            categoria='TECH',
+            complexidade_template='SIMPLES',
+            descricao='Product para testes',
+            commercial_name='Commercial Product Test',
+            master_agreement_url='https://example.com/agreement',
+            configuracao={'test': 'config'},
+            tempo_total_implementacao=30,
+            custo_automatico=True
+        )
+        
+        # Criar PersonalizedProduct de teste
+        self.pp = PersonalizedProduct.objects.create(
+            nome='Produto Personalizado Teste',
+            base_product=self.product
+        )
+        
+        # Dados básicos para PersonalizedProductUBO
+        self.pp_ubo_data = {
+            'personalized_product': self.pp,
+            'ubo': self.ubo,
+            'ownership_percentage': 100.00,
+            'role': 'OWNER',
+            'data_inicio': date.today()
+        }
+    
+    def test_create_personalized_product_ubo_valid(self):
+        """Testa criação de PersonalizedProductUBO com dados válidos"""
+        pp_ubo = PersonalizedProductUBO.objects.create(**self.pp_ubo_data)
+        self.assertEqual(pp_ubo.personalized_product, self.pp)
+        self.assertEqual(pp_ubo.ubo, self.ubo)
+        self.assertEqual(pp_ubo.ownership_percentage, 100.00)
+        self.assertEqual(pp_ubo.role, 'OWNER')
+        self.assertTrue(pp_ubo.ativo)
+    
+    def test_personalized_product_ubo_str_representation(self):
+        """Testa representação string do PersonalizedProductUBO"""
+        pp_ubo = PersonalizedProductUBO.objects.create(**self.pp_ubo_data)
+        expected = f"{self.ubo.nome_completo} - Owner (100.0%)"
+        self.assertEqual(str(pp_ubo), expected)
+    
+    def test_str_representation_without_percentage(self):
+        """Testa representação string sem percentual"""
+        pp_ubo_data = self.pp_ubo_data.copy()
+        pp_ubo_data['ownership_percentage'] = None
+        
+        pp_ubo = PersonalizedProductUBO.objects.create(**pp_ubo_data)
+        expected = f"{self.ubo.nome_completo} - Owner"
+        self.assertEqual(str(pp_ubo), expected)
+    
+    def test_role_choices(self):
+        """Testa choices de role"""
+        pp_ubo = PersonalizedProductUBO.objects.create(**self.pp_ubo_data)
+        
+        # Testar todos os roles válidos
+        valid_roles = ['OWNER', 'BENEFICIARY', 'DIRECTOR', 'SHAREHOLDER', 'TRUSTEE', 'OTHER']
+        for role in valid_roles:
+            pp_ubo.role = role
+            pp_ubo.save()
+            pp_ubo.refresh_from_db()
+            self.assertEqual(pp_ubo.role, role)
+    
+    def test_ownership_percentage_validation_min(self):
+        """Testa validação de percentual mínimo"""
+        pp_ubo_data = self.pp_ubo_data.copy()
+        pp_ubo_data['ownership_percentage'] = 0.005  # Menor que 0.01
+        
+        pp_ubo = PersonalizedProductUBO(**pp_ubo_data)
+        with self.assertRaises(ValidationError):
+            pp_ubo.full_clean()
+    
+    def test_ownership_percentage_validation_max(self):
+        """Testa validação de percentual máximo"""
+        pp_ubo_data = self.pp_ubo_data.copy()
+        pp_ubo_data['ownership_percentage'] = 100.01  # Maior que 100
+        
+        pp_ubo = PersonalizedProductUBO(**pp_ubo_data)
+        with self.assertRaises(ValidationError):
+            pp_ubo.full_clean()
+    
+    def test_clean_validation_data_fim_anterior(self):
+        """Testa validação quando data_fim é anterior a data_inicio"""
+        pp_ubo_data = self.pp_ubo_data.copy()
+        pp_ubo_data['data_fim'] = date(2020, 1, 1)  # Anterior a data_inicio
+        
+        pp_ubo = PersonalizedProductUBO(**pp_ubo_data)
+        with self.assertRaises(ValidationError):
+            pp_ubo.clean()
+    
+    def test_clean_validation_data_fim_valida(self):
+        """Testa validação quando data_fim é posterior a data_inicio"""
+        pp_ubo_data = self.pp_ubo_data.copy()
+        pp_ubo_data['data_fim'] = date(2025, 12, 31)  # Posterior a data_inicio
+        
+        pp_ubo = PersonalizedProductUBO(**pp_ubo_data)
+        # Não deve levantar exceção
+        pp_ubo.clean()
+    
+    def test_unique_together_constraint(self):
+        """Testa constraint unique_together"""
+        # Criar primeiro registro
+        PersonalizedProductUBO.objects.create(**self.pp_ubo_data)
+        
+        # Tentar criar segundo registro com mesma combinação
+        with self.assertRaises(Exception):  # IntegrityError
+            PersonalizedProductUBO.objects.create(**self.pp_ubo_data)
+    
+    def test_ativo_default(self):
+        """Testa valor padrão do campo ativo"""
+        pp_ubo = PersonalizedProductUBO.objects.create(**self.pp_ubo_data)
+        self.assertTrue(pp_ubo.ativo)
+    
+    def test_role_default(self):
+        """Testa valor padrão do role"""
+        pp_ubo_data = self.pp_ubo_data.copy()
+        del pp_ubo_data['role']  # Remover role para testar padrão
+        
+        pp_ubo = PersonalizedProductUBO.objects.create(**pp_ubo_data)
+        self.assertEqual(pp_ubo.role, 'OWNER')
+    
+    def test_meta_verbose_names(self):
+        """Testa nomes verbose da Meta class"""
+        self.assertEqual(PersonalizedProductUBO._meta.verbose_name, "Personalized Product UBO")
+        self.assertEqual(PersonalizedProductUBO._meta.verbose_name_plural, "Personalized Product UBOs")
 

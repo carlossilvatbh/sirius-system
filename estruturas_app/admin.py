@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Estrutura, RegraValidacao, Template, ConfiguracaoSalva, AlertaJurisdicao, UBO, Successor, Product
+from .models import Estrutura, RegraValidacao, Template, ConfiguracaoSalva, AlertaJurisdicao, UBO, Successor, Product, PersonalizedProduct, PersonalizedProductUBO
 
 
 @admin.register(Estrutura)
@@ -566,4 +566,267 @@ class ProductAdmin(admin.ModelAdmin):
             f"{updated} produto(s) desativado(s) com sucesso."
         )
     desativar_products.short_description = "Desativar produtos selecionados"
+
+
+class PersonalizedProductUBOInline(admin.TabularInline):
+    """
+    Inline para gerenciar UBOs associados ao PersonalizedProduct
+    """
+    model = PersonalizedProductUBO
+    extra = 1
+    fields = [
+        'ubo',
+        'ownership_percentage',
+        'role',
+        'data_inicio',
+        'data_fim',
+        'ativo'
+    ]
+    autocomplete_fields = ['ubo']
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('ubo')
+
+
+@admin.register(PersonalizedProduct)
+class PersonalizedProductAdmin(admin.ModelAdmin):
+    """
+    Admin interface for managing personalized products.
+    """
+    list_display = [
+        'nome',
+        'base_display',
+        'status',
+        'version_number',
+        'ubos_count',
+        'ownership_total',
+        'custo_display',
+        'ativo'
+    ]
+    list_filter = [
+        'status',
+        'ativo',
+        'version_number',
+        'created_at',
+        'base_product__categoria',
+    ]
+    search_fields = [
+        'nome',
+        'descricao',
+        'base_product__commercial_name',
+        'base_product__nome',
+        'base_structure__nome',
+        'ubos__nome_completo'
+    ]
+    readonly_fields = ['version_number', 'created_at', 'updated_at']
+    autocomplete_fields = ['base_product', 'base_structure', 'parent_version']
+    inlines = [PersonalizedProductUBOInline]
+    
+    fieldsets = (
+        ('Informações Básicas', {
+            'fields': (
+                'nome',
+                'descricao',
+                'status'
+            )
+        }),
+        ('Base do Produto', {
+            'fields': (
+                'base_product',
+                'base_structure'
+            ),
+            'description': 'Selecione apenas um: Product ou Structure'
+        }),
+        ('Versionamento', {
+            'fields': (
+                'version_number',
+                'parent_version'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Personalização', {
+            'fields': (
+                'configuracao_personalizada',
+                'custo_personalizado',
+                'observacoes'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Status e Metadados', {
+            'fields': (
+                'ativo',
+                'created_at',
+                'updated_at'
+            ),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def base_display(self, obj):
+        """Exibe o objeto base (Product ou Structure)"""
+        base_obj = obj.get_base_object()
+        base_type = obj.get_base_type()
+        
+        if base_obj:
+            color = 'blue' if base_type == 'Product' else 'green'
+            return format_html(
+                '<span style="color: {}; font-weight: bold;">[{}]</span> {}',
+                color,
+                base_type,
+                str(base_obj)
+            )
+        return '-'
+    base_display.short_description = "Base"
+    
+    def ubos_count(self, obj):
+        """Exibe número de UBOs associados"""
+        count = obj.get_ubos_ativos().count()
+        color = 'green' if count > 0 else 'gray'
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{}</span>',
+            color,
+            count
+        )
+    ubos_count.short_description = "UBOs"
+    
+    def ownership_total(self, obj):
+        """Exibe percentual total de propriedade"""
+        total = obj.get_total_ownership_percentage()
+        color = 'green' if total == 100 else 'orange' if total > 0 else 'gray'
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{:.1f}%</span>',
+            color,
+            total
+        )
+    ownership_total.short_description = "Ownership"
+    
+    def custo_display(self, obj):
+        """Exibe custo com formatação"""
+        custo = obj.get_custo_total()
+        tipo = "Custom" if obj.custo_personalizado else "Auto"
+        color = 'purple' if obj.custo_personalizado else 'blue'
+        
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">${:,.2f}</span> <small>({})</small>',
+            color,
+            custo,
+            tipo
+        )
+    custo_display.short_description = "Custo Total"
+    
+    def get_queryset(self, request):
+        """Otimiza consultas com select_related e prefetch_related"""
+        return super().get_queryset(request).select_related(
+            'base_product',
+            'base_structure',
+            'parent_version'
+        ).prefetch_related(
+            'ubos',
+            'personalizedproductubo_set__ubo'
+        )
+    
+    actions = ['create_new_version_action', 'ativar_products', 'desativar_products']
+    
+    def create_new_version_action(self, request, queryset):
+        """Action para criar nova versão dos produtos selecionados"""
+        count = 0
+        for pp in queryset:
+            if pp.status == 'ACTIVE':
+                new_version = pp.create_new_version("Nova versão criada via admin action")
+                count += 1
+        
+        self.message_user(
+            request,
+            f"Criadas {count} nova(s) versão(ões). Apenas produtos ACTIVE foram versionados."
+        )
+    create_new_version_action.short_description = "Criar nova versão (apenas ACTIVE)"
+    
+    def ativar_products(self, request, queryset):
+        """Action para ativar produtos"""
+        updated = queryset.update(ativo=True)
+        self.message_user(
+            request,
+            f"{updated} produto(s) personalizado(s) ativado(s) com sucesso."
+        )
+    ativar_products.short_description = "Ativar produtos selecionados"
+    
+    def desativar_products(self, request, queryset):
+        """Action para desativar produtos"""
+        updated = queryset.update(ativo=False)
+        self.message_user(
+            request,
+            f"{updated} produto(s) personalizado(s) desativado(s) com sucesso."
+        )
+    desativar_products.short_description = "Desativar produtos selecionados"
+
+
+@admin.register(PersonalizedProductUBO)
+class PersonalizedProductUBOAdmin(admin.ModelAdmin):
+    """
+    Admin interface for managing PersonalizedProduct-UBO relationships.
+    """
+    list_display = [
+        'personalized_product',
+        'ubo',
+        'role',
+        'ownership_percentage_display',
+        'data_inicio',
+        'data_fim',
+        'ativo'
+    ]
+    list_filter = [
+        'role',
+        'ativo',
+        'data_inicio',
+        'personalized_product__status'
+    ]
+    search_fields = [
+        'personalized_product__nome',
+        'ubo__nome_completo',
+        'ubo__tin'
+    ]
+    autocomplete_fields = ['personalized_product', 'ubo']
+    date_hierarchy = 'data_inicio'
+    
+    fieldsets = (
+        ('Relacionamento', {
+            'fields': (
+                'personalized_product',
+                'ubo',
+                'role'
+            )
+        }),
+        ('Propriedade', {
+            'fields': (
+                'ownership_percentage',
+                'data_inicio',
+                'data_fim'
+            )
+        }),
+        ('Observações', {
+            'fields': (
+                'observacoes',
+                'ativo'
+            ),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def ownership_percentage_display(self, obj):
+        """Exibe percentual com formatação"""
+        if obj.ownership_percentage:
+            return format_html(
+                '<span style="color: green; font-weight: bold;">{:.2f}%</span>',
+                obj.ownership_percentage
+            )
+        return '-'
+    ownership_percentage_display.short_description = "Ownership %"
+    ownership_percentage_display.admin_order_field = 'ownership_percentage'
+    
+    def get_queryset(self, request):
+        """Otimiza consultas"""
+        return super().get_queryset(request).select_related(
+            'personalized_product',
+            'ubo'
+        )
 
