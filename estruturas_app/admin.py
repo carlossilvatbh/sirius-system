@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Estrutura, RegraValidacao, Template, ConfiguracaoSalva, AlertaJurisdicao, UBO, Successor
+from .models import Estrutura, RegraValidacao, Template, ConfiguracaoSalva, AlertaJurisdicao, UBO, Successor, Product
 
 
 @admin.register(Estrutura)
@@ -425,4 +425,145 @@ class SuccessorAdmin(admin.ModelAdmin):
             from django.contrib import messages
             messages.error(request, f"Erro ao salvar: {str(e)}")
             raise
+
+
+@admin.register(Product)
+class ProductAdmin(admin.ModelAdmin):
+    """
+    Admin interface for managing commercial products.
+    """
+    list_display = [
+        'commercial_name',
+        'nome',
+        'categoria',
+        'complexidade_template',
+        'custo_display',
+        'uso_count',
+        'ativo'
+    ]
+    list_filter = [
+        'categoria',
+        'complexidade_template',
+        'custo_automatico',
+        'ativo',
+        'created_at'
+    ]
+    search_fields = [
+        'commercial_name',
+        'nome',
+        'descricao',
+        'publico_alvo'
+    ]
+    readonly_fields = ['uso_count', 'created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Informações Básicas', {
+            'fields': (
+                'nome',
+                'commercial_name',
+                'categoria',
+                'complexidade_template',
+                'descricao'
+            )
+        }),
+        ('Configuração Comercial', {
+            'fields': (
+                'master_agreement_url',
+                'configuracao'
+            )
+        }),
+        ('Custos', {
+            'fields': (
+                'custo_automatico',
+                'custo_manual'
+            ),
+            'description': 'Configure se o custo será calculado automaticamente ou definido manualmente'
+        }),
+        ('Implementação', {
+            'fields': (
+                'tempo_total_implementacao',
+                'publico_alvo',
+                'casos_uso'
+            )
+        }),
+        ('Status e Estatísticas', {
+            'fields': (
+                'ativo',
+                'uso_count',
+                'created_at',
+                'updated_at'
+            )
+        }),
+    )
+    
+    def custo_display(self, obj):
+        """Exibe custo com formatação e indicação do tipo"""
+        custo = obj.get_custo_total_primeiro_ano()
+        tipo = "Auto" if obj.custo_automatico else "Manual"
+        color = 'green' if obj.custo_automatico else 'blue'
+        
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">${:,.2f}</span> <small>({})</small>',
+            color,
+            custo,
+            tipo
+        )
+    custo_display.short_description = "Custo Total"
+    custo_display.admin_order_field = 'custo_manual'
+    
+    def get_form(self, request, obj=None, **kwargs):
+        """Customiza form baseado no tipo de custo"""
+        form = super().get_form(request, obj, **kwargs)
+        
+        # Ajusta help_text baseado no custo_automatico
+        if obj and not obj.custo_automatico:
+            form.base_fields['custo_manual'].help_text = "Custo definido manualmente (custo automático desabilitado)"
+        elif obj and obj.custo_automatico:
+            form.base_fields['custo_manual'].help_text = "Campo ignorado quando custo automático está habilitado"
+        
+        return form
+    
+    def save_model(self, request, obj, form, change):
+        """Override para validar campos de custo"""
+        if not obj.custo_automatico and not obj.custo_manual:
+            from django.contrib import messages
+            messages.warning(
+                request, 
+                "Atenção: Custo manual não definido. O produto terá custo zero."
+            )
+        
+        super().save_model(request, obj, form, change)
+    
+    actions = ['incrementar_uso_action', 'ativar_products', 'desativar_products']
+    
+    def incrementar_uso_action(self, request, queryset):
+        """Action para incrementar contador de uso"""
+        count = 0
+        for product in queryset:
+            product.incrementar_uso()
+            count += 1
+        
+        self.message_user(
+            request,
+            f"Contador de uso incrementado para {count} produto(s)."
+        )
+    incrementar_uso_action.short_description = "Incrementar contador de uso"
+    
+    def ativar_products(self, request, queryset):
+        """Action para ativar produtos"""
+        updated = queryset.update(ativo=True)
+        self.message_user(
+            request,
+            f"{updated} produto(s) ativado(s) com sucesso."
+        )
+    ativar_products.short_description = "Ativar produtos selecionados"
+    
+    def desativar_products(self, request, queryset):
+        """Action para desativar produtos"""
+        updated = queryset.update(ativo=False)
+        self.message_user(
+            request,
+            f"{updated} produto(s) desativado(s) com sucesso."
+        )
+    desativar_products.short_description = "Desativar produtos selecionados"
 

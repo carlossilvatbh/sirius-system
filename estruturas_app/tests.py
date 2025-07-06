@@ -2,7 +2,7 @@ from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from datetime import date
-from .models import UBO, Successor
+from .models import UBO, Successor, Product
 
 
 class UBOModelTest(TestCase):
@@ -426,4 +426,249 @@ class SuccessorModelTest(TestCase):
         """Testa nomes verbose do modelo"""
         self.assertEqual(Successor._meta.verbose_name, "Successor")
         self.assertEqual(Successor._meta.verbose_name_plural, "Successors")
+
+
+
+class ProductModelTest(TestCase):
+    """
+    Testes unitários para o modelo Product
+    """
+    
+    def setUp(self):
+        """Configuração inicial para os testes"""
+        self.product_data = {
+            'nome': 'Produto Teste',
+            'commercial_name': 'Test Product Commercial',
+            'categoria': 'TECH',
+            'complexidade_template': 'INTERMEDIATE',
+            'descricao': 'Descrição detalhada do produto de teste',
+            'master_agreement_url': 'https://example.com/master-agreement.pdf',
+            'configuracao': {'elementos': [{'estrutura_id': 1}, {'estrutura_id': 2}]},
+            'tempo_total_implementacao': 30,
+            'custo_manual': 5000.00
+        }
+    
+    def test_create_product_valid(self):
+        """Testa criação de Product com dados válidos"""
+        product = Product.objects.create(**self.product_data)
+        self.assertEqual(product.nome, 'Produto Teste')
+        self.assertEqual(product.commercial_name, 'Test Product Commercial')
+        self.assertEqual(product.categoria, 'TECH')
+        self.assertTrue(product.custo_automatico)  # Valor padrão
+        self.assertTrue(product.ativo)  # Valor padrão
+        self.assertEqual(product.uso_count, 0)  # Valor padrão
+        self.assertIsNotNone(product.created_at)
+        self.assertIsNotNone(product.updated_at)
+    
+    def test_product_str_representation(self):
+        """Testa representação string do Product"""
+        product = Product.objects.create(**self.product_data)
+        expected = f"{self.product_data['commercial_name']} ({self.product_data['nome']})"
+        self.assertEqual(str(product), expected)
+    
+    def test_product_custo_automatico_default(self):
+        """Testa valor padrão do campo custo_automatico"""
+        product = Product.objects.create(**self.product_data)
+        self.assertTrue(product.custo_automatico)
+    
+    def test_product_custo_manual_mode(self):
+        """Testa modo de custo manual"""
+        product_data = {
+            **self.product_data,
+            'custo_automatico': False,
+            'custo_manual': 7500.00
+        }
+        product = Product.objects.create(**product_data)
+        self.assertFalse(product.custo_automatico)
+        self.assertEqual(product.custo_manual, 7500.00)
+        self.assertEqual(product.get_custo_total_primeiro_ano(), 7500.00)
+    
+    def test_product_custo_automatico_mode(self):
+        """Testa modo de custo automático"""
+        product = Product.objects.create(**self.product_data)
+        self.assertTrue(product.custo_automatico)
+        # Por enquanto retorna 0 (será implementado na Fase 4)
+        self.assertEqual(product.get_custo_total_calculado(), 0)
+        self.assertEqual(product.get_custo_total_primeiro_ano(), 0)
+    
+    def test_product_categorias_choices(self):
+        """Testa se todas as categorias definidas são válidas"""
+        categorias_validas = [choice[0] for choice in Product.CATEGORIAS]
+        
+        for categoria in categorias_validas:
+            with self.subTest(categoria=categoria):
+                product_data = {**self.product_data, 'categoria': categoria}
+                product = Product.objects.create(**product_data)
+                self.assertEqual(product.categoria, categoria)
+    
+    def test_product_complexidade_choices(self):
+        """Testa se todas as complexidades definidas são válidas"""
+        complexidades_validas = [choice[0] for choice in Product.COMPLEXIDADE_PRODUCT]
+        
+        for complexidade in complexidades_validas:
+            with self.subTest(complexidade=complexidade):
+                product_data = {**self.product_data, 'complexidade_template': complexidade}
+                product = Product.objects.create(**product_data)
+                self.assertEqual(product.complexidade_template, complexidade)
+    
+    def test_product_incrementar_uso(self):
+        """Testa método incrementar_uso"""
+        product = Product.objects.create(**self.product_data)
+        self.assertEqual(product.uso_count, 0)
+        
+        product.incrementar_uso()
+        product.refresh_from_db()
+        self.assertEqual(product.uso_count, 1)
+        
+        product.incrementar_uso()
+        product.refresh_from_db()
+        self.assertEqual(product.uso_count, 2)
+    
+    def test_product_get_estruturas_incluidas_valid_json(self):
+        """Testa método get_estruturas_incluidas com JSON válido"""
+        product = Product.objects.create(**self.product_data)
+        estruturas = product.get_estruturas_incluidas()
+        self.assertEqual(estruturas, [1, 2])
+    
+    def test_product_get_estruturas_incluidas_invalid_json(self):
+        """Testa método get_estruturas_incluidas com JSON inválido"""
+        product_data = {
+            **self.product_data,
+            'configuracao': 'json_invalido'
+        }
+        product = Product.objects.create(**product_data)
+        estruturas = product.get_estruturas_incluidas()
+        self.assertEqual(estruturas, [])
+    
+    def test_product_get_estruturas_incluidas_empty_config(self):
+        """Testa método get_estruturas_incluidas com configuração vazia"""
+        product_data = {
+            **self.product_data,
+            'configuracao': {}
+        }
+        product = Product.objects.create(**product_data)
+        estruturas = product.get_estruturas_incluidas()
+        self.assertEqual(estruturas, [])
+    
+    def test_product_campos_opcionais(self):
+        """Testa criação de Product apenas com campos obrigatórios"""
+        # Remove campos opcionais
+        required_data = {k: v for k, v in self.product_data.items() 
+                        if k not in ['publico_alvo', 'casos_uso', 'custo_manual']}
+        
+        product = Product.objects.create(**required_data)
+        self.assertEqual(product.publico_alvo, '')
+        self.assertEqual(product.casos_uso, '')
+        self.assertIsNone(product.custo_manual)
+    
+    def test_product_campos_opcionais_preenchidos(self):
+        """Testa criação de Product com todos os campos preenchidos"""
+        dados_completos = {
+            **self.product_data,
+            'publico_alvo': 'Empresas de tecnologia e startups',
+            'casos_uso': 'Estruturação de holdings, proteção patrimonial'
+        }
+        
+        product = Product.objects.create(**dados_completos)
+        self.assertEqual(product.publico_alvo, dados_completos['publico_alvo'])
+        self.assertEqual(product.casos_uso, dados_completos['casos_uso'])
+    
+    def test_product_url_validation(self):
+        """Testa validação de URL do master_agreement_url"""
+        # URL válida
+        product = Product(**self.product_data)
+        product.full_clean()  # Não deve gerar erro
+        
+        # URL inválida
+        product_data_invalid = {
+            **self.product_data,
+            'master_agreement_url': 'url_invalida'
+        }
+        product_invalid = Product(**product_data_invalid)
+        with self.assertRaises(ValidationError):
+            product_invalid.full_clean()
+    
+    def test_product_ordering(self):
+        """Testa ordenação dos Products por uso_count e commercial_name"""
+        product1 = Product.objects.create(
+            nome='Produto A',
+            commercial_name='A Commercial',
+            categoria='TECH',
+            descricao='Descrição A',
+            master_agreement_url='https://example.com/a.pdf',
+            configuracao={},
+            tempo_total_implementacao=10,
+            uso_count=5
+        )
+        product2 = Product.objects.create(
+            nome='Produto B',
+            commercial_name='B Commercial',
+            categoria='TRADING',
+            descricao='Descrição B',
+            master_agreement_url='https://example.com/b.pdf',
+            configuracao={},
+            tempo_total_implementacao=20,
+            uso_count=10
+        )
+        product3 = Product.objects.create(
+            nome='Produto C',
+            commercial_name='C Commercial',
+            categoria='INVESTMENT',
+            descricao='Descrição C',
+            master_agreement_url='https://example.com/c.pdf',
+            configuracao={},
+            tempo_total_implementacao=15,
+            uso_count=10
+        )
+        
+        products = list(Product.objects.all())
+        # Deve estar ordenado por -uso_count, commercial_name
+        # Product2 e Product3 têm uso_count=10, então ordenação por commercial_name
+        self.assertEqual(products[0], product2)  # uso_count=10, B Commercial
+        self.assertEqual(products[1], product3)  # uso_count=10, C Commercial  
+        self.assertEqual(products[2], product1)  # uso_count=5, A Commercial
+    
+    def test_product_get_categoria_display(self):
+        """Testa método get_categoria_display"""
+        product = Product.objects.create(**self.product_data)
+        self.assertEqual(product.get_categoria_display(), 'Technology')
+        
+        product.categoria = 'REAL_ESTATE'
+        product.save()
+        self.assertEqual(product.get_categoria_display(), 'Real Estate')
+    
+    def test_product_get_complexidade_template_display(self):
+        """Testa método get_complexidade_template_display"""
+        product = Product.objects.create(**self.product_data)
+        self.assertEqual(product.get_complexidade_template_display(), 'Intermediate Configuration')
+        
+        product.complexidade_template = 'EXPERT'
+        product.save()
+        self.assertEqual(product.get_complexidade_template_display(), 'Expert Configuration')
+    
+    def test_product_ativo_default(self):
+        """Testa valor padrão do campo ativo"""
+        product = Product.objects.create(**self.product_data)
+        self.assertTrue(product.ativo)
+    
+    def test_product_meta_verbose_names(self):
+        """Testa nomes verbose do modelo"""
+        self.assertEqual(Product._meta.verbose_name, "Product")
+        self.assertEqual(Product._meta.verbose_name_plural, "Products")
+    
+    def test_product_json_field_handling(self):
+        """Testa manipulação do campo JSON configuracao"""
+        # Teste com dict
+        product = Product.objects.create(**self.product_data)
+        self.assertIsInstance(product.configuracao, dict)
+        
+        # Teste com JSON string
+        import json
+        product_data_json_str = {
+            **self.product_data,
+            'configuracao': json.dumps({'test': 'value'})
+        }
+        product2 = Product.objects.create(**product_data_json_str)
+        # Django automaticamente converte string JSON para dict
+        self.assertIsInstance(product2.configuracao, (dict, str))
 

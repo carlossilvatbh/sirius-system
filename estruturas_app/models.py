@@ -614,3 +614,136 @@ class Successor(models.Model):
         total_usado = sum(s.percentual for s in outros_sucessores)
         return 100 - total_usado
 
+
+
+class Product(models.Model):
+    """
+    Produto comercial que conecta duas ou mais Legal Structures
+    Refatoração do modelo Template existente
+    """
+    
+    CATEGORIAS = [
+        ('TECH', 'Technology'),
+        ('REAL_ESTATE', 'Real Estate'),
+        ('TRADING', 'Trading'),
+        ('FAMILY_OFFICE', 'Family Office'),
+        ('INVESTMENT', 'Investment'),
+        ('GENERAL', 'General'),
+    ]
+    
+    COMPLEXIDADE_PRODUCT = [
+        ('BASIC', 'Basic Configuration'),
+        ('INTERMEDIATE', 'Intermediate Configuration'),
+        ('ADVANCED', 'Advanced Configuration'),
+        ('EXPERT', 'Expert Configuration'),
+    ]
+    
+    # Campos básicos (mantidos do Template)
+    nome = models.CharField(max_length=100, help_text="Nome do produto")
+    categoria = models.CharField(
+        max_length=20,
+        choices=CATEGORIAS,
+        help_text="Categoria do produto"
+    )
+    complexidade_template = models.CharField(
+        max_length=20,
+        choices=COMPLEXIDADE_PRODUCT,
+        default='BASIC',
+        help_text="Nível de complexidade"
+    )
+    descricao = models.TextField(help_text="Descrição detalhada do produto")
+    
+    # Novos campos comerciais
+    commercial_name = models.CharField(
+        max_length=200,
+        help_text="Nome comercial do produto (texto livre)"
+    )
+    master_agreement_url = models.URLField(
+        help_text="URL para documento de Master Agreement"
+    )
+    
+    # Configuração e custos
+    configuracao = models.JSONField(
+        help_text="Configuração completa do produto em JSON"
+    )
+    custo_automatico = models.BooleanField(
+        default=True,
+        help_text="Se True, custo é calculado automaticamente das estruturas"
+    )
+    custo_manual = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Custo manual (usado quando custo_automatico=False)"
+    )
+    
+    # Campos mantidos do Template
+    tempo_total_implementacao = models.IntegerField(
+        help_text="Tempo total de implementação em dias"
+    )
+    uso_count = models.IntegerField(
+        default=0,
+        help_text="Número de vezes que este produto foi usado"
+    )
+    publico_alvo = models.TextField(
+        blank=True,
+        help_text="Público-alvo do produto"
+    )
+    casos_uso = models.TextField(
+        blank=True,
+        help_text="Casos de uso comuns"
+    )
+    
+    # Metadados
+    ativo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Product"
+        verbose_name_plural = "Products"
+        ordering = ['-uso_count', 'commercial_name']
+        indexes = [
+            models.Index(fields=['commercial_name']),
+            models.Index(fields=['categoria']),
+            models.Index(fields=['ativo']),
+        ]
+    
+    def __str__(self):
+        return f"{self.commercial_name} ({self.nome})"
+    
+    def get_custo_total_calculado(self):
+        """Calcula custo total baseado nas estruturas hierárquicas"""
+        if not self.custo_automatico:
+            return self.custo_manual or 0
+        
+        # Por enquanto retorna 0, será implementado quando ProductHierarchy for criado
+        # na Fase 4 (PersonalizedProduct)
+        return 0
+    
+    def incrementar_uso(self):
+        """Incrementa contador de uso"""
+        self.uso_count += 1
+        self.save(update_fields=['uso_count'])
+    
+    def get_estruturas_incluidas(self):
+        """Retorna lista de IDs de estruturas incluídas neste produto"""
+        try:
+            config = self.configuracao
+            if isinstance(config, str):
+                import json
+                config = json.loads(config)
+            
+            elementos = config.get('elementos', [])
+            return [elemento.get('estrutura_id') for elemento in elementos if elemento.get('estrutura_id')]
+        except (json.JSONDecodeError, AttributeError):
+            return []
+    
+    def get_custo_total_primeiro_ano(self):
+        """Calcula custo total do primeiro ano"""
+        if self.custo_automatico:
+            return self.get_custo_total_calculado()
+        else:
+            return self.custo_manual or 0
+
