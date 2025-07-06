@@ -1,7 +1,8 @@
 from django.test import TestCase
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from datetime import date
-from .models import UBO
+from .models import UBO, Successor
 
 
 class UBOModelTest(TestCase):
@@ -169,4 +170,260 @@ class UBOModelTest(TestCase):
         """Testa nomes verbose do modelo"""
         self.assertEqual(UBO._meta.verbose_name, "Ultimate Beneficial Owner")
         self.assertEqual(UBO._meta.verbose_name_plural, "Ultimate Beneficial Owners")
+
+
+
+
+class SuccessorModelTest(TestCase):
+    """
+    Testes unitários para o modelo Successor
+    """
+    
+    def setUp(self):
+        """Configuração inicial para os testes"""
+        # Criar UBOs para testes
+        self.ubo_proprietario = UBO.objects.create(
+            nome_completo='Proprietário Teste',
+            data_nascimento=date(1970, 1, 1),
+            nacionalidade='BR',
+            tin='PROP123456'
+        )
+        self.ubo_sucessor1 = UBO.objects.create(
+            nome_completo='Sucessor 1',
+            data_nascimento=date(1990, 1, 1),
+            nacionalidade='BR',
+            tin='SUCC123456'
+        )
+        self.ubo_sucessor2 = UBO.objects.create(
+            nome_completo='Sucessor 2',
+            data_nascimento=date(1995, 1, 1),
+            nacionalidade='US',
+            tin='SUCC789012'
+        )
+        
+        self.successor_data = {
+            'ubo_proprietario': self.ubo_proprietario,
+            'ubo_sucessor': self.ubo_sucessor1,
+            'percentual': 60.00
+        }
+    
+    def test_create_successor_valid(self):
+        """Testa criação de Successor com dados válidos"""
+        successor = Successor.objects.create(**self.successor_data)
+        self.assertEqual(successor.ubo_proprietario, self.ubo_proprietario)
+        self.assertEqual(successor.ubo_sucessor, self.ubo_sucessor1)
+        self.assertEqual(successor.percentual, 60.00)
+        self.assertTrue(successor.ativo)
+        self.assertFalse(successor.efetivado)
+        self.assertIsNotNone(successor.created_at)
+        self.assertIsNotNone(successor.updated_at)
+    
+    def test_successor_str_representation(self):
+        """Testa representação string do Successor"""
+        successor = Successor.objects.create(**self.successor_data)
+        expected = f"{self.ubo_proprietario.nome_completo} → {self.ubo_sucessor1.nome_completo} (60.0%)"
+        self.assertEqual(str(successor), expected)
+    
+    def test_self_succession_prevention(self):
+        """Testa prevenção de auto-sucessão"""
+        successor = Successor(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_proprietario,  # Mesmo UBO
+            percentual=100.00
+        )
+        with self.assertRaises(ValidationError) as context:
+            successor.full_clean()
+        
+        self.assertIn("UBO não pode ser sucessor de si mesmo", str(context.exception))
+    
+    def test_percentual_sum_validation_valid(self):
+        """Testa validação de soma de percentuais válida"""
+        # Criar primeiro sucessor com 60%
+        successor1 = Successor.objects.create(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_sucessor1,
+            percentual=60.00
+        )
+        
+        # Criar segundo sucessor com 40% (total = 100%)
+        successor2 = Successor(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_sucessor2,
+            percentual=40.00
+        )
+        successor2.full_clean()  # Não deve gerar erro
+        successor2.save()
+        
+        # Verificar que ambos foram salvos
+        self.assertEqual(Successor.objects.filter(ubo_proprietario=self.ubo_proprietario).count(), 2)
+    
+    def test_percentual_sum_validation_invalid(self):
+        """Testa validação de soma de percentuais inválida"""
+        # Criar primeiro sucessor com 60%
+        successor1 = Successor.objects.create(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_sucessor1,
+            percentual=60.00
+        )
+        
+        # Tentar criar segundo sucessor que excederia 100%
+        successor2 = Successor(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_sucessor2,
+            percentual=50.00  # 60 + 50 = 110% > 100%
+        )
+        
+        with self.assertRaises(ValidationError) as context:
+            successor2.full_clean()
+        
+        self.assertIn("Soma dos percentuais excede 100%", str(context.exception))
+        self.assertIn("Disponível: 40.00%", str(context.exception))
+    
+    def test_percentual_validation_range(self):
+        """Testa validação de range do percentual"""
+        # Percentual muito baixo
+        successor_low = Successor(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_sucessor1,
+            percentual=0.00
+        )
+        with self.assertRaises(ValidationError):
+            successor_low.full_clean()
+        
+        # Percentual muito alto
+        successor_high = Successor(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_sucessor1,
+            percentual=100.01
+        )
+        with self.assertRaises(ValidationError):
+            successor_high.full_clean()
+        
+        # Percentual válido máximo
+        successor_max = Successor(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_sucessor1,
+            percentual=100.00
+        )
+        successor_max.full_clean()  # Não deve gerar erro
+    
+    def test_unique_together_constraint(self):
+        """Testa constraint unique_together"""
+        # Criar primeiro sucessor
+        successor1 = Successor.objects.create(**self.successor_data)
+        
+        # Tentar criar segundo sucessor com mesma combinação
+        with self.assertRaises(Exception):  # IntegrityError no banco
+            Successor.objects.create(**self.successor_data)
+    
+    def test_validar_percentuais_completos_method(self):
+        """Testa método validar_percentuais_completos"""
+        # Sem sucessores - deve retornar False
+        self.assertFalse(Successor.validar_percentuais_completos(self.ubo_proprietario))
+        
+        # Com sucessores que somam 100%
+        Successor.objects.create(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_sucessor1,
+            percentual=60.00
+        )
+        Successor.objects.create(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_sucessor2,
+            percentual=40.00
+        )
+        
+        self.assertTrue(Successor.validar_percentuais_completos(self.ubo_proprietario))
+        
+        # Com sucessores que não somam 100%
+        Successor.objects.filter(ubo_proprietario=self.ubo_proprietario).delete()
+        Successor.objects.create(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_sucessor1,
+            percentual=50.00
+        )
+        
+        self.assertFalse(Successor.validar_percentuais_completos(self.ubo_proprietario))
+    
+    def test_get_percentual_disponivel_method(self):
+        """Testa método get_percentual_disponivel"""
+        # Criar sucessor com 60%
+        successor1 = Successor.objects.create(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_sucessor1,
+            percentual=60.00
+        )
+        
+        # Criar novo sucessor (não salvo ainda)
+        successor2 = Successor(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_sucessor2,
+            percentual=0.00
+        )
+        
+        # Deve retornar 40% disponível
+        self.assertEqual(successor2.get_percentual_disponivel(), 40.00)
+        
+        # Para o sucessor existente, deve considerar apenas outros sucessores
+        self.assertEqual(successor1.get_percentual_disponivel(), 100.00)
+    
+    def test_successor_ordering(self):
+        """Testa ordenação dos Successors por data_definicao"""
+        # Criar sucessores em momentos diferentes
+        successor1 = Successor.objects.create(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_sucessor1,
+            percentual=60.00
+        )
+        
+        # Simular criação posterior
+        from django.utils import timezone
+        import time
+        time.sleep(0.01)  # Pequena pausa para garantir timestamps diferentes
+        
+        successor2 = Successor.objects.create(
+            ubo_proprietario=self.ubo_proprietario,
+            ubo_sucessor=self.ubo_sucessor2,
+            percentual=40.00
+        )
+        
+        successors = list(Successor.objects.all())
+        # Deve estar ordenado por -data_definicao (mais recente primeiro)
+        self.assertEqual(successors[0], successor2)
+        self.assertEqual(successors[1], successor1)
+    
+    def test_successor_status_fields(self):
+        """Testa campos de status do Successor"""
+        successor = Successor.objects.create(**self.successor_data)
+        
+        # Valores padrão
+        self.assertTrue(successor.ativo)
+        self.assertFalse(successor.efetivado)
+        self.assertIsNone(successor.data_efetivacao_real)
+        
+        # Alterar status
+        successor.efetivado = True
+        successor.data_efetivacao_real = timezone.now()
+        successor.save()
+        
+        successor.refresh_from_db()
+        self.assertTrue(successor.efetivado)
+        self.assertIsNotNone(successor.data_efetivacao_real)
+    
+    def test_successor_optional_fields(self):
+        """Testa campos opcionais do Successor"""
+        successor_data_complete = {
+            **self.successor_data,
+            'data_efetivacao': date(2025, 12, 31),
+            'condicoes': 'Sucessão condicionada à maioridade do sucessor'
+        }
+        
+        successor = Successor.objects.create(**successor_data_complete)
+        self.assertEqual(successor.data_efetivacao, date(2025, 12, 31))
+        self.assertEqual(successor.condicoes, 'Sucessão condicionada à maioridade do sucessor')
+    
+    def test_successor_meta_verbose_names(self):
+        """Testa nomes verbose do modelo"""
+        self.assertEqual(Successor._meta.verbose_name, "Successor")
+        self.assertEqual(Successor._meta.verbose_name_plural, "Successors")
 

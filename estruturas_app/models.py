@@ -485,3 +485,132 @@ class UBO(models.Model):
         # Implementação será expandida quando PersonalizedProduct for implementado
         return []
 
+
+
+
+class Successor(models.Model):
+    """
+    Modelo para gestão de sucessão entre UBOs
+    """
+    
+    # Relacionamentos
+    ubo_proprietario = models.ForeignKey(
+        UBO,
+        on_delete=models.CASCADE,
+        related_name='sucessores_definidos',
+        help_text="UBO que está definindo a sucessão"
+    )
+    ubo_sucessor = models.ForeignKey(
+        UBO,
+        on_delete=models.CASCADE,
+        related_name='sucessoes_recebidas',
+        help_text="UBO que receberá a sucessão"
+    )
+    
+    # Campos de sucessão
+    percentual = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(0.01), MaxValueValidator(100.00)],
+        help_text="Percentual que o sucessor receberá (0.01 a 100.00)"
+    )
+    data_definicao = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Data em que a sucessão foi definida"
+    )
+    data_efetivacao = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Data em que a sucessão deve ser efetivada (opcional)"
+    )
+    condicoes = models.TextField(
+        blank=True,
+        help_text="Condições específicas para a sucessão"
+    )
+    
+    # Produto específico (opcional) - usando string para referência forward
+    # personalized_product será implementado na Fase 4
+    # personalized_product = models.ForeignKey(
+    #     'PersonalizedProduct',
+    #     on_delete=models.CASCADE,
+    #     null=True,
+    #     blank=True,
+    #     help_text="Produto específico sendo transferido (se aplicável)"
+    # )
+    
+    # Status
+    ativo = models.BooleanField(default=True)
+    efetivado = models.BooleanField(default=False)
+    data_efetivacao_real = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Data real em que a sucessão foi efetivada"
+    )
+    
+    # Metadados
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Successor"
+        verbose_name_plural = "Successors"
+        ordering = ['-data_definicao']
+        unique_together = ['ubo_proprietario', 'ubo_sucessor']
+        indexes = [
+            models.Index(fields=['ubo_proprietario', 'ativo']),
+            models.Index(fields=['data_efetivacao']),
+        ]
+    
+    def __str__(self):
+        return f"{self.ubo_proprietario.nome_completo} → {self.ubo_sucessor.nome_completo} ({self.percentual}%)"
+    
+    def clean(self):
+        """Validações customizadas"""
+        from django.core.exceptions import ValidationError
+        
+        super().clean()
+        
+        # Validar que sucessor não é o mesmo que proprietário
+        if self.ubo_proprietario == self.ubo_sucessor:
+            raise ValidationError("UBO não pode ser sucessor de si mesmo")
+        
+        # Validar soma de percentuais para o mesmo proprietário
+        if self.pk:
+            outros_sucessores = Successor.objects.filter(
+                ubo_proprietario=self.ubo_proprietario,
+                ativo=True
+            ).exclude(pk=self.pk)
+        else:
+            outros_sucessores = Successor.objects.filter(
+                ubo_proprietario=self.ubo_proprietario,
+                ativo=True
+            )
+        
+        total_outros = sum(s.percentual for s in outros_sucessores)
+        if total_outros + self.percentual > 100:
+            raise ValidationError({
+                'percentual': f'Soma dos percentuais excede 100%. Disponível: {100 - total_outros}%'
+            })
+    
+    @classmethod
+    def validar_percentuais_completos(cls, ubo_proprietario):
+        """Valida se os percentuais de um UBO somam exatamente 100%"""
+        total = cls.objects.filter(
+            ubo_proprietario=ubo_proprietario,
+            ativo=True
+        ).aggregate(
+            total=models.Sum('percentual')
+        )['total'] or 0
+        
+        return abs(total - 100) < 0.01  # Tolerância para problemas de precisão decimal
+    
+    def get_percentual_disponivel(self):
+        """Retorna o percentual ainda disponível para o UBO proprietário"""
+        outros_sucessores = Successor.objects.filter(
+            ubo_proprietario=self.ubo_proprietario,
+            ativo=True
+        ).exclude(pk=self.pk if self.pk else None)
+        
+        total_usado = sum(s.percentual for s in outros_sucessores)
+        return 100 - total_usado
+

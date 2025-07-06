@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Estrutura, RegraValidacao, Template, ConfiguracaoSalva, AlertaJurisdicao, UBO
+from .models import Estrutura, RegraValidacao, Template, ConfiguracaoSalva, AlertaJurisdicao, UBO, Successor
 
 
 @admin.register(Estrutura)
@@ -343,4 +343,86 @@ class UBOAdmin(admin.ModelAdmin):
             count
         )
     products_count.short_description = "Products"
+
+
+
+@admin.register(Successor)
+class SuccessorAdmin(admin.ModelAdmin):
+    """
+    Admin interface for managing succession between UBOs.
+    """
+    list_display = [
+        'ubo_proprietario',
+        'ubo_sucessor',
+        'percentual_display',
+        'data_efetivacao',
+        'efetivado',
+        'ativo'
+    ]
+    list_filter = [
+        'efetivado',
+        'ativo',
+        'data_definicao'
+    ]
+    search_fields = [
+        'ubo_proprietario__nome_completo',
+        'ubo_sucessor__nome_completo'
+    ]
+    autocomplete_fields = ['ubo_proprietario', 'ubo_sucessor']
+    readonly_fields = ['data_definicao', 'created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Sucessão', {
+            'fields': (
+                'ubo_proprietario',
+                'ubo_sucessor',
+                'percentual'
+            )
+        }),
+        ('Datas', {
+            'fields': (
+                'data_definicao',
+                'data_efetivacao',
+                'data_efetivacao_real'
+            )
+        }),
+        ('Condições', {
+            'fields': ('condicoes',),
+            'classes': ('collapse',)
+        }),
+        ('Status', {
+            'fields': ('ativo', 'efetivado', 'created_at', 'updated_at')
+        }),
+    )
+    
+    def percentual_display(self, obj):
+        color = 'green' if obj.percentual == 100 else 'orange'
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{:.2f}%</span>',
+            color,
+            obj.percentual
+        )
+    percentual_display.short_description = "Percentual"
+    percentual_display.admin_order_field = 'percentual'
+    
+    def get_form(self, request, obj=None, **kwargs):
+        """Customiza form para mostrar percentual disponível"""
+        form = super().get_form(request, obj, **kwargs)
+        
+        if obj and obj.ubo_proprietario:
+            # Calcula percentual disponível
+            disponivel = obj.get_percentual_disponivel()
+            form.base_fields['percentual'].help_text = f"Disponível: {disponivel:.2f}%"
+        
+        return form
+    
+    def save_model(self, request, obj, form, change):
+        """Override para validar percentuais antes de salvar"""
+        try:
+            obj.full_clean()
+            super().save_model(request, obj, form, change)
+        except Exception as e:
+            from django.contrib import messages
+            messages.error(request, f"Erro ao salvar: {str(e)}")
+            raise
 
