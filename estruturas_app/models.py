@@ -385,3 +385,103 @@ class AlertaJurisdicao(models.Model):
     def __str__(self):
         return f"{self.get_jurisdicao_display()}: {self.titulo}"
 
+
+
+
+class UBO(models.Model):
+    """
+    Ultimate Beneficial Owner - Pessoa física proprietária ou beneficiária
+    de Products ou Legal Structures
+    """
+    
+    NACIONALIDADES = [
+        ('BR', 'Brasil'),
+        ('US', 'Estados Unidos'),
+        ('BS', 'Bahamas'),
+        ('KN', 'São Cristóvão e Nevis'),
+        ('VG', 'Ilhas Virgens Britânicas'),
+        ('PA', 'Panamá'),
+        ('CH', 'Suíça'),
+        ('SG', 'Singapura'),
+        ('HK', 'Hong Kong'),
+        ('OTHER', 'Outro'),
+    ]
+    
+    # Campos obrigatórios
+    nome_completo = models.CharField(
+        max_length=200,
+        help_text="Nome completo do Ultimate Beneficial Owner"
+    )
+    data_nascimento = models.DateField(
+        help_text="Data de nascimento"
+    )
+    nacionalidade = models.CharField(
+        max_length=10,
+        choices=NACIONALIDADES,
+        help_text="Nacionalidade do UBO"
+    )
+    tin = models.CharField(
+        max_length=50,
+        help_text="Tax Identification Number - número emitido pelo país de residência fiscal"
+    )
+    
+    # Campos opcionais
+    endereco_residencia_fiscal = models.TextField(
+        blank=True,
+        help_text="Endereço completo de residência fiscal"
+    )
+    telefone = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Telefone de contato"
+    )
+    email = models.EmailField(
+        blank=True,
+        help_text="Email de contato"
+    )
+    observacoes = models.TextField(
+        blank=True,
+        help_text="Observações adicionais sobre o UBO"
+    )
+    
+    # Metadados
+    ativo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Ultimate Beneficial Owner"
+        verbose_name_plural = "Ultimate Beneficial Owners"
+        ordering = ['nome_completo']
+        indexes = [
+            models.Index(fields=['tin']),
+            models.Index(fields=['nacionalidade']),
+            models.Index(fields=['ativo']),
+        ]
+    
+    def __str__(self):
+        return f"{self.nome_completo} ({self.tin})"
+    
+    def clean(self):
+        """Validações customizadas"""
+        from django.core.exceptions import ValidationError
+        import re
+        
+        super().clean()
+        
+        # Validação básica de TIN (pode ser expandida por país)
+        if self.tin and not re.match(r'^[A-Z0-9\-]{5,20}$', self.tin.upper()):
+            raise ValidationError({
+                'tin': 'TIN deve conter apenas letras, números e hífens (5-20 caracteres)'
+            })
+    
+    def get_products_associados(self):
+        """Retorna todos os Products associados a este UBO"""
+        # Implementação será expandida quando Product for refatorado
+        return []
+    
+    def get_structures_associadas(self):
+        """Retorna todas as Legal Structures associadas a este UBO"""
+        # Implementação será expandida quando PersonalizedProduct for implementado
+        return []
+

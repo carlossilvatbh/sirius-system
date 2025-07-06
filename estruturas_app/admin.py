@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Estrutura, RegraValidacao, Template, ConfiguracaoSalva, AlertaJurisdicao
+from .models import Estrutura, RegraValidacao, Template, ConfiguracaoSalva, AlertaJurisdicao, UBO
 
 
 @admin.register(Estrutura)
@@ -280,4 +280,67 @@ class AlertaJurisdicaoAdmin(admin.ModelAdmin):
 admin.site.site_header = "SIRIUS Administration"
 admin.site.site_title = "SIRIUS Admin"
 admin.site.index_title = "Strategic Intelligence Relationship & Interactive Universal System"
+
+
+
+
+@admin.register(UBO)
+class UBOAdmin(admin.ModelAdmin):
+    """
+    Admin interface for managing Ultimate Beneficial Owners.
+    """
+    list_display = [
+        'nome_completo',
+        'nacionalidade_display',
+        'tin',
+        'data_nascimento',
+        'products_count',
+        'ativo'
+    ]
+    list_filter = [
+        'nacionalidade',
+        'ativo',
+        'created_at'
+    ]
+    search_fields = [
+        'nome_completo',
+        'tin',
+        'email'
+    ]
+    readonly_fields = ['created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Informações Pessoais', {
+            'fields': ('nome_completo', 'data_nascimento', 'nacionalidade')
+        }),
+        ('Informações Fiscais', {
+            'fields': ('tin', 'endereco_residencia_fiscal')
+        }),
+        ('Contato', {
+            'fields': ('telefone', 'email'),
+            'classes': ('collapse',)
+        }),
+        ('Observações', {
+            'fields': ('observacoes',),
+            'classes': ('collapse',)
+        }),
+        ('Status e Metadados', {
+            'fields': ('ativo', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def nacionalidade_display(self, obj):
+        return obj.get_nacionalidade_display()
+    nacionalidade_display.short_description = "Nacionalidade"
+    nacionalidade_display.admin_order_field = 'nacionalidade'
+    
+    def products_count(self, obj):
+        count = len(obj.get_products_associados())
+        return format_html(
+            '<span style="color: {};">{}</span>',
+            'green' if count > 0 else 'gray',
+            count
+        )
+    products_count.short_description = "Products"
 
