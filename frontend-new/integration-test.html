@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sirius API Integration Test</title>
+    <style>
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f7fa;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e1e5e9;
+            border-radius: 6px;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #2d3748;
+            border-bottom: 2px solid #3182ce;
+            padding-bottom: 10px;
+        }
+        .status {
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-weight: 500;
+            margin: 10px 0;
+        }
+        .status.loading {
+            background: #bee3f8;
+            color: #2a69ac;
+        }
+        .status.success {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        .status.error {
+            background: #fed7d7;
+            color: #c53030;
+        }
+        .data-display {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+        }
+        button {
+            background: #3182ce;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2c5282;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Sirius System - Backend Integration Test</h1>
+        <p>Testing the integration between Vue.js frontend and Django backend</p>
+
+        <div class="test-section">
+            <h3>🏗️ Structures API Test</h3>
+            <button onclick="testStructures()">Test Structures Endpoint</button>
+            <div id="structures-status" class="status loading">Ready to test...</div>
+            <div id="structures-data" class="data-display"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📋 Templates API Test</h3>
+            <button onclick="testTemplates()">Test Templates Endpoint</button>
+            <div id="templates-status" class="status loading">Ready to test...</div>
+            <div id="templates-data" class="data-display"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>✅ Validation API Test</h3>
+            <button onclick="testValidation()">Test Validation Endpoint</button>
+            <div id="validation-status" class="status loading">Ready to test...</div>
+            <div id="validation-data" class="data-display"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>💰 Cost Calculation API Test</h3>
+            <button onclick="testCostCalculation()">Test Cost Calculation</button>
+            <div id="cost-status" class="status loading">Ready to test...</div>
+            <div id="cost-data" class="data-display"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔔 Jurisdiction Alerts API Test</h3>
+            <button onclick="testAlerts()">Test Alerts Endpoint</button>
+            <div id="alerts-status" class="status loading">Ready to test...</div>
+            <div id="alerts-data" class="data-display"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 Summary</h3>
+            <div id="summary" class="data-display">
+                Click the test buttons above to run integration tests...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = 'http://localhost:8001/estruturas/api';
+        let testResults = {};
+
+        function updateStatus(testName, status, message) {
+            const statusEl = document.getElementById(`${testName}-status`);
+            statusEl.className = `status ${status}`;
+            statusEl.textContent = message;
+            testResults[testName] = { status, message };
+            updateSummary();
+        }
+
+        function updateData(testName, data) {
+            const dataEl = document.getElementById(`${testName}-data`);
+            dataEl.textContent = JSON.stringify(data, null, 2);
+        }
+
+        function updateSummary() {
+            const summaryEl = document.getElementById('summary');
+            const total = Object.keys(testResults).length;
+            const passed = Object.values(testResults).filter(r => r.status === 'success').length;
+            const failed = Object.values(testResults).filter(r => r.status === 'error').length;
+
+            summaryEl.innerHTML = `
+                <strong>Test Results Summary:</strong><br>
+                Total Tests: ${total}<br>
+                Passed: ${passed} ✅<br>
+                Failed: ${failed} ❌<br>
+                <br>
+                ${Object.entries(testResults).map(([test, result]) => 
+                    `${test}: ${result.status === 'success' ? '✅' : '❌'} ${result.message}`
+                ).join('<br>')}
+            `;
+        }
+
+        async function testStructures() {
+            updateStatus('structures', 'loading', 'Testing structures endpoint...');
+            try {
+                const response = await fetch(`${BASE_URL}/estruturas/`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const data = await response.json();
+                updateStatus('structures', 'success', `Success! Found ${data.length} structures`);
+                updateData('structures', data.slice(0, 2)); // Show first 2 structures
+            } catch (error) {
+                updateStatus('structures', 'error', `Error: ${error.message}`);
+                updateData('structures', { error: error.message });
+            }
+        }
+
+        async function testTemplates() {
+            updateStatus('templates', 'loading', 'Testing templates endpoint...');
+            try {
+                const response = await fetch(`${BASE_URL}/templates/`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const data = await response.json();
+                updateStatus('templates', 'success', `Success! Found ${data.length} templates`);
+                updateData('templates', data);
+            } catch (error) {
+                updateStatus('templates', 'error', `Error: ${error.message}`);
+                updateData('templates', { error: error.message });
+            }
+        }
+
+        async function testValidation() {
+            updateStatus('validation', 'loading', 'Testing validation endpoint...');
+            try {
+                const testConfig = {
+                    elementos: [
+                        { estrutura_id: 1, position: { x: 100, y: 100 } },
+                        { estrutura_id: 2, position: { x: 300, y: 100 } }
+                    ],
+                    conexoes: [
+                        { source: "1", target: "2", type: "ownership" }
+                    ]
+                };
+
+                const response = await fetch(`${BASE_URL}/validar-configuracao/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(testConfig)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const data = await response.json();
+                updateStatus('validation', 'success', 'Validation endpoint working!');
+                updateData('validation', data);
+            } catch (error) {
+                updateStatus('validation', 'error', `Error: ${error.message}`);
+                updateData('validation', { error: error.message });
+            }
+        }
+
+        async function testCostCalculation() {
+            updateStatus('cost', 'loading', 'Testing cost calculation endpoint...');
+            try {
+                const testConfig = {
+                    elementos: [
+                        { estrutura: { id: 1, custo_base: 15000, custo_manutencao: 5000 }, position: { x: 100, y: 100 } },
+                        { estrutura: { id: 2, custo_base: 8000, custo_manutencao: 3000 }, position: { x: 300, y: 100 } }
+                    ],
+                    cenario: 'basic',
+                    incluir_analise_risco: true
+                };
+
+                const response = await fetch(`${BASE_URL}/calcular-custos/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(testConfig)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const data = await response.json();
+                updateStatus('cost', 'success', 'Cost calculation working!');
+                updateData('cost', data);
+            } catch (error) {
+                updateStatus('cost', 'error', `Error: ${error.message}`);
+                updateData('cost', { error: error.message });
+            }
+        }
+
+        async function testAlerts() {
+            updateStatus('alerts', 'loading', 'Testing alerts endpoint...');
+            try {
+                const response = await fetch(`${BASE_URL}/alertas-jurisdicao/`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const data = await response.json();
+                updateStatus('alerts', 'success', `Success! Found ${data.length} alerts`);
+                updateData('alerts', data);
+            } catch (error) {
+                updateStatus('alerts', 'error', `Error: ${error.message}`);
+                updateData('alerts', { error: error.message });
+            }
+        }
+
+        // Auto-run all tests when page loads
+        window.addEventListener('load', async () => {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+            await testStructures();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await testTemplates();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await testValidation();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await testCostCalculation();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await testAlerts();
+        });
+    </script>
+</body>
+</html>

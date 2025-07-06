@@ -162,12 +162,7 @@ export const useSiriusStore = defineStore('sirius', () => {
     error.value = null;
     
     try {
-      // Use mock data for development
-      const { mockStructures } = await import('@/data/mockData');
-      structures.value = mockStructures;
-      
-      // In production, use API:
-      // structures.value = await apiService.getStructures();
+      structures.value = await apiService.getStructures();
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to load structures';
       console.error('Error loading structures:', err);
@@ -181,12 +176,7 @@ export const useSiriusStore = defineStore('sirius', () => {
     error.value = null;
     
     try {
-      // Use mock data for development
-      const { mockTemplates } = await import('@/data/mockData');
-      templates.value = mockTemplates;
-      
-      // In production, use API:
-      // templates.value = await apiService.getTemplates();
+      templates.value = await apiService.getTemplates();
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to load templates';
       console.error('Error loading templates:', err);
@@ -202,9 +192,20 @@ export const useSiriusStore = defineStore('sirius', () => {
     }
     
     try {
+      // Convert CanvasEdge to SiriusEdge for validation
+      const siriusEdges = currentConfiguration.value.edges.map(edge => ({
+        ...edge,
+        data: edge.data ? {
+          ...edge.data,
+          connectionType: edge.data.connectionType || edge.type
+        } : {
+          connectionType: edge.type
+        }
+      }));
+      
       validationResults.value = await validationEngine.validateConfiguration({
         nodes: currentConfiguration.value.nodes,
-        edges: currentConfiguration.value.edges,
+        edges: siriusEdges,
         context: {
           jurisdiction: 'US', // TODO: Get from user context
           userType: 'business',
@@ -218,17 +219,12 @@ export const useSiriusStore = defineStore('sirius', () => {
         score: 0,
         errors: [{
           id: 'validation-error',
-          type: 'error',
-          severity: 'critical',
-          title: 'Validation Error',
-          description: 'Failed to validate configuration',
-          affectedNodes: [],
-          affectedEdges: [],
-          rule: {} as any
+          message: 'Failed to validate configuration',
+          structureIds: [],
+          severity: 'ERROR'
         }],
         warnings: [],
-        suggestions: [],
-        recommendations: []
+        suggestions: []
       };
     }
   }

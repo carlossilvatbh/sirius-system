@@ -1,5 +1,5 @@
 <template>
-  <div id="app" class="sirius-app">
+  <div class="sirius-app">
     <!-- Header -->
     <AppHeader />
     
@@ -13,25 +13,16 @@
       
       <!-- Main Canvas Area -->
       <main class="main-content">
-        <div class="canvas-wrapper">
-          <SiriusCanvas />
-        </div>
+        <SiriusCanvas class="canvas-area" />
         
-        <!-- Information Panel -->
-        <InformationPanel
-          v-if="selectedStructure"
-          :structure="selectedStructure"
-          class="information-panel"
+        <!-- Right Panel - Validation & Information -->
+        <div class="right-panel" v-if="showRightPanel">
+          <ValidationPanel 
+          :results="validationStore.validationResults || { isValid: true, score: 0, errors: [], warnings: [], suggestions: [] }" 
         />
+        </div>
       </main>
     </div>
-    
-    <!-- Mobile Menu Overlay -->
-    <div
-      v-if="mobileMenuOpen"
-      class="mobile-overlay"
-      @click="closeMobileMenu"
-    ></div>
     
     <!-- Loading Overlay -->
     <div v-if="loading" class="loading-overlay">
@@ -47,54 +38,133 @@
       class="error-toast"
     >
       <div class="error-content">
-        <AlertIcon class="w-5 h-5 text-red-500" />
-        <span>{{ error }}</span>
+        <span class="error-icon">⚠️</span>
+        <span class="error-message">{{ error }}</span>
         <button
           @click="clearError"
           class="error-close"
         >
-          <XMarkIcon class="w-4 h-4" />
+          ✕
         </button>
       </div>
+    </div>
+    
+    <!-- Auto-save Indicator -->
+    <div v-if="persistenceStore.lastSaved" class="autosave-indicator">
+      <span class="autosave-icon">💾</span>
+      <span class="autosave-text">
+        Last saved: {{ formatLastSaved }}
+      </span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import { useSiriusStore } from '@/stores';
+import { useCanvasStore } from '@/stores/canvas';
+import { useStructuresStore } from '@/stores/structures';
+import { useValidationStore } from '@/stores/validation';
+import { usePersistenceStore } from '@/stores/persistence';
 
 // Components
 import AppHeader from '@/components/layout/AppHeader.vue';
 import AppSidebar from '@/components/layout/AppSidebar.vue';
 import SiriusCanvas from '@/components/canvas/SiriusCanvas.vue';
-import InformationPanel from '@/components/layout/InformationPanel.vue';
+import ValidationPanel from '@/components/canvas/ValidationPanel.vue';
 
-// Icons
-const AlertIcon = { template: '<div>⚠️</div>' };
-const XMarkIcon = { template: '<div>✕</div>' };
-
-const store = useSiriusStore();
+// Stores
+const siriusStore = useSiriusStore();
+const canvasStore = useCanvasStore();
+const structuresStore = useStructuresStore();
+const validationStore = useValidationStore();
+const persistenceStore = usePersistenceStore();
 
 // Computed properties
-const sidebarOpen = computed(() => store.sidebarOpen);
-const mobileMenuOpen = computed(() => store.mobileMenuOpen);
-const selectedStructure = computed(() => store.selectedStructure);
-const loading = computed(() => store.loading);
-const error = computed(() => store.error);
+const sidebarOpen = computed(() => siriusStore.sidebarOpen);
+const loading = computed(() => structuresStore.isLoading);
+const error = computed(() => structuresStore.error);
+const showRightPanel = computed(() => canvasStore.nodes.length > 0);
+
+const formatLastSaved = computed(() => {
+  if (!persistenceStore.lastSaved) return '';
+  const now = new Date();
+  const diff = now.getTime() - persistenceStore.lastSaved.getTime();
+  const minutes = Math.floor(diff / 60000);
+  
+  if (minutes < 1) return 'just now';
+  if (minutes === 1) return '1 minute ago';
+  return `${minutes} minutes ago`;
+});
 
 // Methods
 const closeSidebar = () => {
-  store.toggleSidebar();
-};
-
-const closeMobileMenu = () => {
-  store.closeMobileMenu();
+  siriusStore.toggleSidebar();
 };
 
 const clearError = () => {
-  store.error = null;
+  structuresStore.error = null;
 };
+
+// Keyboard shortcuts
+const handleKeydown = (event: KeyboardEvent) => {
+  // Global shortcuts are handled in SiriusCanvas
+  // This is for app-level shortcuts
+  if (event.ctrlKey || event.metaKey) {
+    switch (event.key) {
+      case 'e':
+        event.preventDefault();
+        persistenceStore.exportConfiguration();
+        break;
+      case 'o':
+        event.preventDefault();
+        // Trigger file input for import
+        triggerImport();
+        break;
+    }
+  }
+};
+
+const triggerImport = () => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = async (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (file) {
+      try {
+        await persistenceStore.importConfiguration(file);
+        console.log('Configuration imported successfully');
+      } catch (error) {
+        console.error('Failed to import configuration:', error);
+        structuresStore.error = 'Failed to import configuration file';
+      }
+    }
+  };
+  input.click();
+};
+
+// Handle beforeunload to warn about unsaved changes
+const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+  if (canvasStore.nodes.length > 0) {
+    event.preventDefault();
+    event.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+  }
+};
+
+onMounted(async () => {
+  // Load initial data
+  await structuresStore.fetchStructures();
+  
+  // Set up event listeners
+  document.addEventListener('keydown', handleKeydown);
+  window.addEventListener('beforeunload', handleBeforeUnload);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeydown);
+  window.removeEventListener('beforeunload', handleBeforeUnload);
+});
 </script>
 
 <style scoped>

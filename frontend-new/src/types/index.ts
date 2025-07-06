@@ -55,6 +55,7 @@ export interface CanvasEdge {
   type: ConnectionType;
   data?: {
     label?: string;
+    connectionType?: ConnectionType;
   };
 }
 
@@ -62,15 +63,21 @@ export type ConnectionType = 'ownership' | 'control' | 'beneficiary';
 
 // Validation Types
 export interface ValidationRule {
-  id: number;
-  estrutura_a: number;
-  estrutura_b: number;
-  tipo_relacionamento: RelationshipType;
-  severidade: SeverityLevel;
-  descricao: string;
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  severity: SeverityLevel;
+  jurisdiction?: string;
+  applicableStructures?: string[];
+  estrutura_a?: number;
+  estrutura_b?: number;
+  tipo_relacionamento?: RelationshipType;
+  descricao?: string;
   condicoes?: Record<string, any>;
   jurisdicao_aplicavel?: string;
-  ativo: boolean;
+  ativo?: boolean;
+  solution?: string;
 }
 
 export type RelationshipType = 
@@ -84,6 +91,7 @@ export type SeverityLevel = 'ERROR' | 'WARNING' | 'INFO';
 
 export interface ValidationResult {
   isValid: boolean;
+  score: number; // 0-100 validation score
   errors: ValidationError[];
   warnings: ValidationWarning[];
   suggestions: ValidationSuggestion[];
@@ -212,18 +220,26 @@ export interface UserPreferences {
   theme?: 'light' | 'dark';
 }
 
-// Jurisdiction Alert Types
 export interface JurisdictionAlert {
-  id: number;
-  jurisdicao: string;
-  tipo_alerta: AlertType;
-  titulo: string;
-  descricao: string;
-  estruturas_aplicaveis: number[];
-  prioridade: number;
-  ativo: boolean;
-  created_at: string;
-  updated_at: string;
+  id: string;
+  jurisdiction: string;
+  type: 'tax' | 'compliance' | 'reporting' | 'deadline' | 'regulatory';
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  title: string;
+  description: string;
+  deadline?: string;
+  affectedStructures: string[];
+  actionRequired: boolean;
+  // Legacy fields for backward compatibility
+  jurisdicao?: string;
+  tipo_alerta?: AlertType;
+  titulo?: string;
+  descricao?: string;
+  estruturas_aplicaveis?: number[];
+  prioridade?: number;
+  ativo?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export type AlertType = 

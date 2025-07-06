@@ -28,6 +28,7 @@
     "vite"
   ],
   "dependencies": {
+    "@tailwindcss/postcss": "^4.1.11",
     "@vue-flow/background": "^1.3.2",
     "@vue-flow/controls": "^1.1.2",
     "@vue-flow/core": "^1.45.0",

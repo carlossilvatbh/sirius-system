@@ -613,48 +613,6 @@ class ApiService {
       keys: Array.from(this.cache.keys()),
     };
   }
-
-  // Templates - Individual operations
-  async getTemplate(templateId: number): Promise<Template> {
-    const cacheKey = `template-${templateId}`;
-    const cached = this.getFromCache<Template>(cacheKey);
-    if (cached) return cached;
-
-    const templates = await this.getTemplates();
-    const template = templates.find(t => t.id === templateId);
-    
-    if (!template) {
-      throw new Error(`Template with ID ${templateId} not found`);
-    }
-
-    this.setCache(cacheKey, template);
-    return template;
-  }
-
-  async saveTemplate(templateData: CreateTemplateRequest): Promise<Template> {
-    // Since backend doesn't have individual template save endpoint,
-    // we'll simulate it by creating a template object with a unique ID
-    const mockTemplate: Template = {
-      id: Date.now(), // Use timestamp as mock ID
-      nome: templateData.nome,
-      categoria: templateData.categoria,
-      complexidade_template: templateData.complexidade_template,
-      descricao: templateData.descricao,
-      configuracao: templateData.configuracao,
-      custo_total: 0, // Will be calculated
-      tempo_total_implementacao: 0, // Will be calculated
-      uso_count: 0,
-      publico_alvo: 'Geral',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      ativo: true
-    };
-
-    // Clear templates cache to force refresh
-    this.clearCache();
-    
-    return mockTemplate;
-  }
 }
 
 export class ApiError extends Error {

@@ -12,9 +12,7 @@ document.head.appendChild(fontAwesome)
 // Create Vue app
 const app = createApp(SiriusApp)
 
-// Create Pinia store
-const pinia = createPinia()
-app.use(pinia)
+app.use(createPinia())
 
 // Mount app
 app.mount('#app')

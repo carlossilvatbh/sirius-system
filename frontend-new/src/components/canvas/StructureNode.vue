@@ -67,11 +67,11 @@
           :key="message.id"
           :class="[
             'validation-message',
-            `validation-${message.type}`
+            `validation-${message.severity.toLowerCase()}`
           ]"
         >
-          <component :is="getValidationIcon(message.type)" class="w-3 h-3" />
-          <span class="text-xs">{{ message.title }}</span>
+          <component :is="getValidationIcon(message.severity)" class="w-3 h-3" />
+          <span class="text-xs">{{ message.message }}</span>
         </div>
       </div>
     </div>
@@ -79,22 +79,22 @@
     <!-- Connection Handles -->
     <Handle
       type="target"
-      position="top"
+      :position="Position.Top"
       class="connection-handle connection-handle-top"
     />
     <Handle
       type="source"
-      position="bottom"
+      :position="Position.Bottom"
       class="connection-handle connection-handle-bottom"
     />
     <Handle
       type="target"
-      position="left"
+      :position="Position.Left"
       class="connection-handle connection-handle-left"
     />
     <Handle
       type="source"
-      position="right"
+      :position="Position.Right"
       class="connection-handle connection-handle-right"
     />
     
@@ -124,14 +124,14 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
-import { Handle } from '@vue-flow/core';
-import type { LegalStructure, ValidationIssue } from '@/types';
+import { Handle, Position } from '@vue-flow/core';
+import type { LegalStructure } from '../../types';
 import { 
   getStructureTypeDisplay, 
   getStructureTypeColor, 
   formatCurrency 
-} from '@/utils/helpers';
-import { useSiriusStore } from '@/stores';
+} from '../../utils/helpers';
+import { useSiriusStore } from '../../stores';
 
 // Icons (placeholder - would use actual icon library)
 const XMarkIcon = { template: '<div>✕</div>' };
@@ -236,7 +236,7 @@ const validationMessages = computed(() => {
   ];
   
   return allIssues.filter(issue => 
-    issue.affectedNodes.includes(props.id)
+    issue.structureIds.includes(props.id)
   ).slice(0, 2); // Show max 2 messages
 });
 
@@ -282,10 +282,11 @@ const deleteNode = () => {
   showContextMenu.value = false;
 };
 
-const getValidationIcon = (type: string) => {
-  switch (type) {
+const getValidationIcon = (severity: string) => {
+  switch (severity.toLowerCase()) {
     case 'error': return ErrorIcon;
     case 'warning': return AlertIcon;
+    case 'info': return InfoIcon;
     default: return InfoIcon;
   }
 };
