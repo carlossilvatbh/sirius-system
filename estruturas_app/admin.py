@@ -11,6 +11,7 @@ class EstruturaAdmin(admin.ModelAdmin):
     list_display = [
         'nome', 
         'tipo', 
+        'get_full_jurisdiction_display',
         'custo_base_formatted', 
         'custo_manutencao_formatted',
         'tempo_implementacao',
@@ -19,7 +20,10 @@ class EstruturaAdmin(admin.ModelAdmin):
         'ativo'
     ]
     list_filter = [
-        'tipo', 
+        'tipo',
+        'jurisdicao',
+        'estado_us',
+        'estado_br',
         'complexidade', 
         'nivel_confidencialidade', 
         'protecao_patrimonial',
@@ -31,6 +35,10 @@ class EstruturaAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Basic Information', {
             'fields': ('nome', 'tipo', 'descricao', 'ativo')
+        }),
+        ('Jurisdiction', {
+            'fields': ('jurisdicao', 'estado_us', 'estado_br'),
+            'description': 'Select state only if jurisdiction is US or Brazil'
         }),
         ('Cost Information', {
             'fields': ('custo_base', 'custo_manutencao'),
@@ -88,6 +96,11 @@ class EstruturaAdmin(admin.ModelAdmin):
         )
     complexidade_display.short_description = "Complexity"
     complexidade_display.admin_order_field = 'complexidade'
+
+    def get_full_jurisdiction_display(self, obj):
+        return obj.get_full_jurisdiction_display()
+    get_full_jurisdiction_display.short_description = "Jurisdiction"
+    get_full_jurisdiction_display.admin_order_field = 'jurisdicao'
 
 
 @admin.register(RegraValidacao)
@@ -339,7 +352,6 @@ class ProductAdmin(admin.ModelAdmin):
         ('Configuração Comercial', {
             'fields': (
                 'master_agreement_url',
-                'configuracao'
             )
         }),
         ('Custos', {
@@ -520,6 +532,7 @@ class PersonalizedProductAdmin(admin.ModelAdmin):
     ]
     readonly_fields = ['version_number', 'created_at', 'updated_at']
     autocomplete_fields = ['base_product', 'base_structure', 'parent_version']
+    filter_horizontal = ('ubos',)  # Widget for multiple selection of UBOs
     
     fieldsets = (
         ('Informações Básicas', {
@@ -535,6 +548,12 @@ class PersonalizedProductAdmin(admin.ModelAdmin):
                 'base_structure'
             ),
             'description': 'Selecione apenas um: Product ou Structure'
+        }),
+        ('UBOs Associados', {
+            'fields': (
+                'ubos',
+            ),
+            'description': 'UBOs proprietários deste produto personalizado'
         }),
         ('Versionamento', {
             'fields': (

@@ -13,19 +13,79 @@ class Estrutura(models.Model):
     """
     
     TIPOS_ESTRUTURA = [
-        ('BDAO_SAC', 'Bahamas DAO SAC'),
-        ('WYOMING_DAO_LLC', 'Wyoming DAO LLC'),
-        ('BTS_VAULT', 'BTS Vault'),
+        ('TRUST', 'Trust'),
+        ('FOREIGN_TRUST', 'Foreign Trust'),
+        ('FUND', 'Fund'),
+        ('IBC', 'International Business Company'),
+        ('LLC_DISREGARDED', 'LLC Disregarded Entity'),
+        ('LLC_PARTNERSHIP', 'LLC Partnership'),
+        ('LLC_AS_CORP', 'LLC as a Corp'),
+        ('CORP', 'Corp'),
         ('WYOMING_FOUNDATION', 'Wyoming Statutory Foundation'),
-        ('WYOMING_CORP', 'Wyoming Corporation'),
-        ('NATIONALIZATION', 'Nacionalização'),
-        ('FUND_TOKEN', 'Fund Token as a Service'),
+    ]
+    
+    JURISDICOES = [
+        ('US', 'United States'),
+        ('BS', 'Bahamas'),
+        ('BR', 'Brazil'),
+        ('BZ', 'Belize'),
+        ('VG', 'British Virgin Islands'),
+        ('KY', 'Cayman Islands'),
+        ('PA', 'Panama'),
+    ]
+    
+    US_STATES = [
+        ('AL', 'Alabama'), ('AK', 'Alaska'), ('AZ', 'Arizona'), ('AR', 'Arkansas'),
+        ('CA', 'California'), ('CO', 'Colorado'), ('CT', 'Connecticut'), ('DE', 'Delaware'),
+        ('FL', 'Florida'), ('GA', 'Georgia'), ('HI', 'Hawaii'), ('ID', 'Idaho'),
+        ('IL', 'Illinois'), ('IN', 'Indiana'), ('IA', 'Iowa'), ('KS', 'Kansas'),
+        ('KY', 'Kentucky'), ('LA', 'Louisiana'), ('ME', 'Maine'), ('MD', 'Maryland'),
+        ('MA', 'Massachusetts'), ('MI', 'Michigan'), ('MN', 'Minnesota'), ('MS', 'Mississippi'),
+        ('MO', 'Missouri'), ('MT', 'Montana'), ('NE', 'Nebraska'), ('NV', 'Nevada'),
+        ('NH', 'New Hampshire'), ('NJ', 'New Jersey'), ('NM', 'New Mexico'), ('NY', 'New York'),
+        ('NC', 'North Carolina'), ('ND', 'North Dakota'), ('OH', 'Ohio'), ('OK', 'Oklahoma'),
+        ('OR', 'Oregon'), ('PA', 'Pennsylvania'), ('RI', 'Rhode Island'), ('SC', 'South Carolina'),
+        ('SD', 'South Dakota'), ('TN', 'Tennessee'), ('TX', 'Texas'), ('UT', 'Utah'),
+        ('VT', 'Vermont'), ('VA', 'Virginia'), ('WA', 'Washington'), ('WV', 'West Virginia'),
+        ('WI', 'Wisconsin'), ('WY', 'Wyoming'), ('DC', 'District of Columbia'),
+    ]
+    
+    BR_STATES = [
+        ('AC', 'Acre'), ('AL', 'Alagoas'), ('AP', 'Amapá'), ('AM', 'Amazonas'),
+        ('BA', 'Bahia'), ('CE', 'Ceará'), ('DF', 'Distrito Federal'), ('ES', 'Espírito Santo'),
+        ('GO', 'Goiás'), ('MA', 'Maranhão'), ('MT', 'Mato Grosso'), ('MS', 'Mato Grosso do Sul'),
+        ('MG', 'Minas Gerais'), ('PA', 'Pará'), ('PB', 'Paraíba'), ('PR', 'Paraná'),
+        ('PE', 'Pernambuco'), ('PI', 'Piauí'), ('RJ', 'Rio de Janeiro'), ('RN', 'Rio Grande do Norte'),
+        ('RS', 'Rio Grande do Sul'), ('RO', 'Rondônia'), ('RR', 'Roraima'), ('SC', 'Santa Catarina'),
+        ('SP', 'São Paulo'), ('SE', 'Sergipe'), ('TO', 'Tocantins'),
     ]
     
     # Basic Information
     nome = models.CharField(max_length=100, help_text="Structure name")
     tipo = models.CharField(max_length=50, choices=TIPOS_ESTRUTURA, help_text="Structure type")
     descricao = models.TextField(help_text="Detailed description of the structure")
+    
+    # Jurisdiction Information
+    jurisdicao = models.CharField(
+        max_length=10, 
+        choices=JURISDICOES, 
+        default='US',
+        help_text="Primary jurisdiction"
+    )
+    estado_us = models.CharField(
+        max_length=10, 
+        choices=US_STATES, 
+        blank=True, 
+        null=True,
+        help_text="US State (only if jurisdiction is United States)"
+    )
+    estado_br = models.CharField(
+        max_length=10, 
+        choices=BR_STATES, 
+        blank=True, 
+        null=True,
+        help_text="Brazilian State (only if jurisdiction is Brazil)"
+    )
     
     # Cost Information
     custo_base = models.DecimalField(
@@ -126,6 +186,35 @@ class Estrutura(models.Model):
             5: "Very Complex"
         }
         return complexity_map.get(self.complexidade, "Unknown")
+    
+    def clean(self):
+        """Validate jurisdiction and state combinations"""
+        super().clean()
+        
+        # Validate US state is only set when jurisdiction is US
+        if self.estado_us and self.jurisdicao != 'US':
+            raise ValidationError({
+                'estado_us': 'US State can only be set when jurisdiction is United States'
+            })
+        
+        # Validate BR state is only set when jurisdiction is BR
+        if self.estado_br and self.jurisdicao != 'BR':
+            raise ValidationError({
+                'estado_br': 'Brazilian State can only be set when jurisdiction is Brazil'
+            })
+    
+    def get_full_jurisdiction_display(self):
+        """Get full jurisdiction including state if applicable"""
+        jurisdiction = self.get_jurisdicao_display()
+        
+        if self.jurisdicao == 'US' and self.estado_us:
+            state = dict(self.US_STATES).get(self.estado_us, self.estado_us)
+            return f"{state}, {jurisdiction}"
+        elif self.jurisdicao == 'BR' and self.estado_br:
+            state = dict(self.BR_STATES).get(self.estado_br, self.estado_br)
+            return f"{state}, {jurisdiction}"
+        
+        return jurisdiction
 
 
 class RegraValidacao(models.Model):
@@ -763,9 +852,6 @@ class Product(models.Model):
     )
     
     # Configuração e custos
-    configuracao = models.JSONField(
-        help_text="Configuração completa do produto em JSON"
-    )
     custo_automatico = models.BooleanField(
         default=True,
         help_text="Se True, custo é calculado automaticamente das estruturas"
@@ -1293,7 +1379,7 @@ class Service(models.Model):
         Create a PersonalizedProduct based on this Service.
         This method transforms a Service into a PersonalizedProduct when needed.
         """
-        from .models import PersonalizedProduct, PersonalizedProductUBO
+        from .models import PersonalizedProduct
         
         # Create PersonalizedProduct based on Service
         personalized_data = {
@@ -1324,14 +1410,10 @@ class Service(models.Model):
         
         # Associate UBOs if provided
         if ubos:
+            ubo_objects = []
             for ubo_data in ubos:
-                PersonalizedProductUBO.objects.create(
-                    personalized_product=personalized_product,
-                    ubo=ubo_data['ubo'],
-                    ownership_percentage=ubo_data.get('percentage'),
-                    role=ubo_data.get('role', 'OWNER'),
-                    data_inicio=ubo_data.get('start_date', timezone.now().date())
-                )
+                ubo_objects.append(ubo_data['ubo'])
+            personalized_product.ubos.set(ubo_objects)
         
         return personalized_product
     
