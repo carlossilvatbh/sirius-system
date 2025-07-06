@@ -1,0 +1,294 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}SIRIUS Canvas v2.0 - Modern Interface{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/sirius-modern.css' %}">
+{% endblock %}
+
+{% block content %}
+<div id="sirius-app">
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-overlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <p>Initializing SIRIUS Canvas v2.0...</p>
+        </div>
+    </div>
+
+    <!-- App Container -->
+    <div class="app-container">
+        <!-- Enhanced Header -->
+        <header class="app-header">
+            <div class="header-brand">
+                <button class="sidebar-toggle mobile-only" onclick="toggleMobileSidebar()">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <div class="brand-logo">
+                    <i class="fas fa-layer-group"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>SIRIUS Canvas</h1>
+                    <p class="desktop-only">Legal Structure Designer v2.0</p>
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <button id="save-btn" class="btn btn-success btn-sm">
+                    <i class="fas fa-save"></i>
+                    <span class="desktop-only">Save</span>
+                </button>
+                <button id="pdf-btn" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-file-pdf"></i>
+                    <span class="desktop-only">Export</span>
+                </button>
+                <button class="sidebar-toggle desktop-only" onclick="toggleSidebar()">
+                    <i class="fas fa-sidebar"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="app-main">
+            <!-- Mobile Sidebar Overlay -->
+            <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleMobileSidebar()"></div>
+            
+            <!-- Enhanced Sidebar -->
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <h2>
+                        <i class="fas fa-layer-group"></i>
+                        Structure Library
+                    </h2>
+                    <p>Drag structures to canvas to build your configuration</p>
+                    <button class="sidebar-close mobile-only" onclick="toggleMobileSidebar()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="sidebar-content">
+                    <!-- Search -->
+                    <div class="search-filters">
+                        <div class="search-container">
+                            <input 
+                                type="text" 
+                                id="search-structures" 
+                                placeholder="Search structures..."
+                                class="search-input"
+                            >
+                            <i class="fas fa-search search-icon"></i>
+                            <button class="search-clear" id="search-clear" onclick="clearSearch()" style="display: none;">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Filter Controls -->
+                        <div class="filter-controls" id="filter-controls">
+                            <button class="filter-tag active" data-filter="">All</button>
+                            <button class="filter-tag" data-filter="BDAO_SAC">DAO</button>
+                            <button class="filter-tag" data-filter="WYOMING_LLC">LLC</button>
+                            <button class="filter-tag" data-filter="FOUNDATION">Foundation</button>
+                            <button class="filter-tag" data-filter="CORP">Corporation</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Structure List -->
+                    <div class="structures-list" id="structures-list">
+                        <!-- Structure cards will be populated here -->
+                    </div>
+                    
+                    <!-- Empty State -->
+                    <div class="empty-state" id="structures-empty" style="display: none;">
+                        <div class="icon">
+                            <i class="fas fa-search"></i>
+                        </div>
+                        <h3>No structures found</h3>
+                        <p>Try adjusting your search or filter criteria</p>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Canvas Area -->
+            <section class="canvas-area">
+                <!-- Toolbar -->
+                <div class="canvas-toolbar">
+                    <div class="toolbar-section">
+                        <div class="btn-group">
+                            <button id="clear-canvas" class="btn btn-outline btn-sm">
+                                <i class="fas fa-trash"></i>
+                                <span class="desktop-only">Clear</span>
+                            </button>
+                            <button id="undo-btn" class="btn btn-outline btn-sm" disabled>
+                                <i class="fas fa-undo"></i>
+                            </button>
+                            <button id="redo-btn" class="btn btn-outline btn-sm" disabled>
+                                <i class="fas fa-redo"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="btn-group">
+                            <button id="zoom-out" class="btn btn-outline btn-sm">
+                                <i class="fas fa-search-minus"></i>
+                            </button>
+                            <button id="zoom-reset" class="btn btn-outline btn-sm">
+                                <span id="zoom-level">100%</span>
+                            </button>
+                            <button id="zoom-in" class="btn btn-outline btn-sm">
+                                <i class="fas fa-search-plus"></i>
+                            </button>
+                        </div>
+                        
+                        <button id="connection-mode-btn" class="btn btn-ghost btn-sm">
+                            <i class="fas fa-link"></i>
+                            <span class="desktop-only">Connect</span>
+                        </button>
+                    </div>
+                    
+                    <div class="toolbar-separator"></div>
+                    
+                    <div class="toolbar-section">
+                        <div class="stats-display">
+                            <div class="stats-item">
+                                <span class="stats-label">Elements</span>
+                                <span class="stats-value" id="element-count">0</span>
+                            </div>
+                            <div class="stats-item">
+                                <span class="stats-label">Total Cost</span>
+                                <span class="stats-value success" id="total-cost">$0</span>
+                            </div>
+                        </div>
+                        
+                        <select class="filter-select" id="pricing-scenario">
+                            <option value="basico">Basic</option>
+                            <option value="completo">Complete</option>
+                            <option value="premium">Premium</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Connection Mode Indicator -->
+                <div class="connecting-mode-indicator" id="connection-indicator" style="display: none;">
+                    <i class="fas fa-link"></i>
+                    <span>Connection Mode Active</span>
+                </div>
+                
+                <!-- Canvas Container -->
+                <div class="canvas-container" id="canvas-container">
+                    <div class="canvas-content">
+                        <div class="canvas-grid"></div>
+                        <div class="canvas-elements" id="canvas-elements">
+                            <!-- Canvas elements will be placed here -->
+                        </div>
+                        
+                        <!-- Empty State -->
+                        <div class="canvas-empty" id="canvas-empty">
+                            <div class="icon">
+                                <i class="fas fa-network-wired"></i>
+                            </div>
+                            <h3>Start Building Your Structure</h3>
+                            <p>Drag legal structures from the sidebar to begin designing your optimal configuration</p>
+                            <button class="btn btn-primary mobile-only" onclick="toggleMobileSidebar()">
+                                <i class="fas fa-plus"></i>
+                                Add Structure
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Success Message -->
+<div id="success-message" class="toast success" style="display: none;">
+    <i class="fas fa-check-circle"></i>
+    <span>SIRIUS Canvas v2.0 initialized successfully!</span>
+    <button onclick="hideSuccessMessage()">
+        <i class="fas fa-times"></i>
+    </button>
+</div>
+
+<script>
+// Show success message after page load
+window.addEventListener('load', function() {
+    setTimeout(function() {
+        document.getElementById('loading-screen').style.display = 'none';
+        document.getElementById('success-message').style.display = 'flex';
+        setTimeout(function() {
+            document.getElementById('success-message').style.display = 'none';
+        }, 3000);
+    }, 1000);
+});
+
+function hideSuccessMessage() {
+    document.getElementById('success-message').style.display = 'none';
+}
+
+// Mobile sidebar toggle
+function toggleMobileSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    
+    sidebar.classList.toggle('mobile-open');
+    overlay.style.display = sidebar.classList.contains('mobile-open') ? 'block' : 'none';
+}
+
+// Desktop sidebar toggle
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.classList.toggle('collapsed');
+}
+
+// Clear search
+function clearSearch() {
+    document.getElementById('search-structures').value = '';
+    document.getElementById('search-clear').style.display = 'none';
+}
+
+// Search input handling
+document.getElementById('search-structures').addEventListener('input', function(e) {
+    const clearBtn = document.getElementById('search-clear');
+    clearBtn.style.display = e.target.value ? 'block' : 'none';
+});
+
+console.log('🚀 SIRIUS Canvas v2.0 - Modern Interface Loaded');
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Initialize SIRIUS Canvas v2.0
+window.djangoData = {
+    apiUrls: {
+        estruturas: "{% url 'estruturas:api_estruturas' %}",
+        templates: "{% url 'estruturas:api_templates' %}",
+        calcularCustos: "{% url 'estruturas:api_calcular_custos' %}",
+        validarConfiguracao: "{% url 'estruturas:api_validar_configuracao' %}",
+        salvarConfiguracao: "{% url 'estruturas:api_salvar_configuracao' %}",
+        gerarPdf: "{% url 'estruturas:api_gerar_pdf' %}"
+    }
+};
+
+// Modern JavaScript for enhanced functionality
+class SiriusCanvasV2 {
+    constructor() {
+        this.version = '2.0';
+        this.initialized = false;
+        this.init();
+    }
+
+    init() {
+        console.log(`🎯 Initializing SIRIUS Canvas v${this.version}...`);
+        this.initialized = true;
+        console.log('✅ SIRIUS Canvas v2.0 - Ready for enhanced functionality');
+    }
+}
+
+// Initialize the app
+const siriusApp = new SiriusCanvasV2();
+</script>
+{% endblock %}

@@ -19,6 +19,13 @@ def canvas_principal(request):
     }
     return render(request, 'canvas_clean.html', context)
 
+def canvas_modern(request):
+    """Modern canvas interface with enhanced UX/UI."""
+    context = {
+        'page_title': 'SIRIUS Canvas v2.0 - Modern Interface'
+    }
+    return render(request, 'canvas_modern.html', context)
+
 def admin_estruturas(request):
     """Admin interface for managing structures."""
     estruturas = Estrutura.objects.all()
