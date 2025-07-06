@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Estrutura, RegraValidacao, Template, ConfiguracaoSalva, AlertaJurisdicao, UBO, Successor, Product, PersonalizedProduct, PersonalizedProductUBO, Service, ServiceActivity
+from .models import Estrutura, RegraValidacao, AlertaJurisdicao, UBO, Successor, Product, ProductHierarchy, PersonalizedProduct, Service, ServiceActivity
 
 
 @admin.register(Estrutura)
@@ -59,7 +59,7 @@ class EstruturaAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
         ('Operational Information', {
-            'fields': ('facilidade_banking',),
+            'fields': ('facilidade_banking', 'url_documentos'),
             'classes': ('collapse',)
         }),
         ('Metadata', {
@@ -133,99 +133,6 @@ class RegraValidacaoAdmin(admin.ModelAdmin):
             'fields': ('ativo', 'created_at')
         }),
     )
-
-
-@admin.register(Template)
-class TemplateAdmin(admin.ModelAdmin):
-    """
-    Admin interface for managing configuration templates.
-    """
-    list_display = [
-        'nome', 
-        'categoria', 
-        'complexidade_template',
-        'custo_total_formatted',
-        'tempo_total_implementacao',
-        'uso_count',
-        'ativo'
-    ]
-    list_filter = [
-        'categoria', 
-        'complexidade_template',
-        'ativo'
-    ]
-    search_fields = ['nome', 'descricao', 'publico_alvo']
-    readonly_fields = ['created_at', 'updated_at', 'uso_count']
-    
-    fieldsets = (
-        ('Basic Information', {
-            'fields': (
-                'nome', 
-                'categoria', 
-                'complexidade_template', 
-                'descricao'
-            )
-        }),
-        ('Target & Use Cases', {
-            'fields': ('publico_alvo', 'casos_uso'),
-            'classes': ('collapse',)
-        }),
-        ('Configuration', {
-            'fields': ('configuracao',),
-            'classes': ('collapse',)
-        }),
-        ('Cost & Time', {
-            'fields': ('custo_total', 'tempo_total_implementacao')
-        }),
-        ('Statistics & Status', {
-            'fields': ('uso_count', 'ativo', 'created_at', 'updated_at')
-        }),
-    )
-    
-    def custo_total_formatted(self, obj):
-        return f"${obj.custo_total:,.2f}"
-    custo_total_formatted.short_description = "Total Cost"
-    custo_total_formatted.admin_order_field = 'custo_total'
-
-
-@admin.register(ConfiguracaoSalva)
-class ConfiguracaoSalvaAdmin(admin.ModelAdmin):
-    """
-    Admin interface for managing saved configurations.
-    """
-    list_display = [
-        'nome', 
-        'custo_estimado_formatted',
-        'tempo_estimado',
-        'created_at',
-        'updated_at'
-    ]
-    search_fields = ['nome', 'descricao']
-    readonly_fields = ['created_at', 'updated_at']
-    
-    fieldsets = (
-        ('Basic Information', {
-            'fields': ('nome', 'descricao')
-        }),
-        ('Configuration', {
-            'fields': ('configuracao',),
-            'classes': ('collapse',)
-        }),
-        ('Estimates', {
-            'fields': ('custo_estimado', 'tempo_estimado')
-        }),
-        ('Metadata', {
-            'fields': ('created_at', 'updated_at')
-        }),
-    )
-    
-    def custo_estimado_formatted(self, obj):
-        if obj.custo_estimado:
-            return f"${obj.custo_estimado:,.2f}"
-        return "-"
-    custo_estimado_formatted.short_description = "Estimated Cost"
-    custo_estimado_formatted.admin_order_field = 'custo_estimado'
-
 
 # Customize admin site header and title
 admin.site.site_header = "SIRIUS Administration"
@@ -378,6 +285,20 @@ class SuccessorAdmin(admin.ModelAdmin):
             raise
 
 
+class ProductHierarchyInline(admin.TabularInline):
+    """Inline para gerenciar hierarquia de estruturas dentro de um produto"""
+    model = ProductHierarchy
+    extra = 1
+    fields = [
+        'structure',
+        'parent_structure',
+        'ownership_percentage',
+        'hierarchy_level',
+        'notes'
+    ]
+    autocomplete_fields = ['structure', 'parent_structure']
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     """
@@ -386,14 +307,12 @@ class ProductAdmin(admin.ModelAdmin):
     list_display = [
         'commercial_name',
         'nome',
-        'categoria',
         'complexidade_template',
         'custo_display',
         'uso_count',
         'ativo'
     ]
     list_filter = [
-        'categoria',
         'complexidade_template',
         'custo_automatico',
         'ativo',
@@ -406,13 +325,13 @@ class ProductAdmin(admin.ModelAdmin):
         'publico_alvo'
     ]
     readonly_fields = ['uso_count', 'created_at', 'updated_at']
+    inlines = [ProductHierarchyInline]
     
     fieldsets = (
         ('Informações Básicas', {
             'fields': (
                 'nome',
                 'commercial_name',
-                'categoria',
                 'complexidade_template',
                 'descricao'
             )
@@ -519,24 +438,56 @@ class ProductAdmin(admin.ModelAdmin):
     desativar_products.short_description = "Desativar produtos selecionados"
 
 
-class PersonalizedProductUBOInline(admin.TabularInline):
-    """
-    Inline para gerenciar UBOs associados ao PersonalizedProduct
-    """
-    model = PersonalizedProductUBO
-    extra = 1
-    fields = [
-        'ubo',
-        'ownership_percentage',
-        'role',
-        'data_inicio',
-        'data_fim',
-        'ativo'
+@admin.register(ProductHierarchy)
+class ProductHierarchyAdmin(admin.ModelAdmin):
+    """Admin interface for managing product hierarchies"""
+    list_display = [
+        'product',
+        'structure',
+        'parent_structure',
+        'hierarchy_level',
+        'ownership_percentage'
     ]
-    autocomplete_fields = ['ubo']
+    list_filter = [
+        'hierarchy_level',
+        'product',
+        'created_at'
+    ]
+    search_fields = [
+        'product__commercial_name',
+        'structure__nome',
+        'parent_structure__nome'
+    ]
+    autocomplete_fields = ['product', 'structure', 'parent_structure']
+    readonly_fields = ['created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Hierarchy Definition', {
+            'fields': (
+                'product',
+                'structure',
+                'parent_structure',
+                'hierarchy_level'
+            )
+        }),
+        ('Ownership Details', {
+            'fields': (
+                'ownership_percentage',
+                'notes'
+            )
+        }),
+        ('Metadata', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
     
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('ubo')
+        return super().get_queryset(request).select_related(
+            'product',
+            'structure',
+            'parent_structure'
+        )
 
 
 @admin.register(PersonalizedProduct)
@@ -550,7 +501,6 @@ class PersonalizedProductAdmin(admin.ModelAdmin):
         'status',
         'version_number',
         'ubos_count',
-        'ownership_total',
         'custo_display',
         'ativo'
     ]
@@ -559,7 +509,6 @@ class PersonalizedProductAdmin(admin.ModelAdmin):
         'ativo',
         'version_number',
         'created_at',
-        'base_product__categoria',
     ]
     search_fields = [
         'nome',
@@ -571,7 +520,6 @@ class PersonalizedProductAdmin(admin.ModelAdmin):
     ]
     readonly_fields = ['version_number', 'created_at', 'updated_at']
     autocomplete_fields = ['base_product', 'base_structure', 'parent_version']
-    inlines = [PersonalizedProductUBOInline]
     
     fieldsets = (
         ('Informações Básicas', {
@@ -640,17 +588,6 @@ class PersonalizedProductAdmin(admin.ModelAdmin):
         )
     ubos_count.short_description = "UBOs"
     
-    def ownership_total(self, obj):
-        """Exibe percentual total de propriedade"""
-        total = obj.get_total_ownership_percentage()
-        color = 'green' if total == 100 else 'orange' if total > 0 else 'gray'
-        return format_html(
-            '<span style="color: {}; font-weight: bold;">{:.1f}%</span>',
-            color,
-            total
-        )
-    ownership_total.short_description = "Ownership"
-    
     def custo_display(self, obj):
         """Exibe custo com formatação"""
         custo = obj.get_custo_total()
@@ -672,8 +609,7 @@ class PersonalizedProductAdmin(admin.ModelAdmin):
             'base_structure',
             'parent_version'
         ).prefetch_related(
-            'ubos',
-            'personalizedproductubo_set__ubo'
+            'ubos'
         )
     
     actions = ['create_new_version_action', 'ativar_products', 'desativar_products']
@@ -709,78 +645,6 @@ class PersonalizedProductAdmin(admin.ModelAdmin):
             f"{updated} produto(s) personalizado(s) desativado(s) com sucesso."
         )
     desativar_products.short_description = "Desativar produtos selecionados"
-
-
-@admin.register(PersonalizedProductUBO)
-class PersonalizedProductUBOAdmin(admin.ModelAdmin):
-    """
-    Admin interface for managing PersonalizedProduct-UBO relationships.
-    """
-    list_display = [
-        'personalized_product',
-        'ubo',
-        'role',
-        'ownership_percentage_display',
-        'data_inicio',
-        'data_fim',
-        'ativo'
-    ]
-    list_filter = [
-        'role',
-        'ativo',
-        'data_inicio',
-        'personalized_product__status'
-    ]
-    search_fields = [
-        'personalized_product__nome',
-        'ubo__nome_completo',
-        'ubo__tin'
-    ]
-    autocomplete_fields = ['personalized_product', 'ubo']
-    date_hierarchy = 'data_inicio'
-    
-    fieldsets = (
-        ('Relacionamento', {
-            'fields': (
-                'personalized_product',
-                'ubo',
-                'role'
-            )
-        }),
-        ('Propriedade', {
-            'fields': (
-                'ownership_percentage',
-                'data_inicio',
-                'data_fim'
-            )
-        }),
-        ('Observações', {
-            'fields': (
-                'observacoes',
-                'ativo'
-            ),
-            'classes': ('collapse',)
-        }),
-    )
-    
-    def ownership_percentage_display(self, obj):
-        """Exibe percentual com formatação"""
-        if obj.ownership_percentage:
-            return format_html(
-                '<span style="color: green; font-weight: bold;">{:.2f}%</span>',
-                obj.ownership_percentage
-            )
-        return '-'
-    ownership_percentage_display.short_description = "Ownership %"
-    ownership_percentage_display.admin_order_field = 'ownership_percentage'
-    
-    def get_queryset(self, request):
-        """Otimiza consultas"""
-        return super().get_queryset(request).select_related(
-            'personalized_product',
-            'ubo'
-        )
-
 
 
 class ServiceActivityInline(admin.TabularInline):

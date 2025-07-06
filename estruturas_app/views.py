@@ -3,7 +3,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 import json
-from .models import Estrutura, RegraValidacao, Template, ConfiguracaoSalva, AlertaJurisdicao
+from .models import Estrutura, RegraValidacao, AlertaJurisdicao, Product, PersonalizedProduct
 from .cost_calculator import calculate_configuration_cost_django
 from .validation_engine import validate_configuration_django
 from .pdf_generator import generate_pdf_report
@@ -99,7 +99,7 @@ def api_estruturas(request):
 def api_templates(request):
     """API endpoint to get all available templates."""
     try:
-        templates = Template.objects.filter(ativo=True)
+        templates = Product.objects.filter(ativo=True)
         data = []
         
         for template in templates:
@@ -288,7 +288,7 @@ def api_salvar_configuracao(request):
             return JsonResponse({'error': 'Name and elements are required'}, status=400)
         
         # Create configuration
-        configuracao = ConfiguracaoSalva.objects.create(
+        configuracao = PersonalizedProduct.objects.create(
             nome=nome,
             descricao=descricao,
             configuracao_json=json.dumps(elementos),
@@ -310,7 +310,7 @@ def api_salvar_configuracao(request):
 def api_configuracoes_salvas(request):
     """API endpoint to get saved configurations."""
     try:
-        configuracoes = ConfiguracaoSalva.objects.all().order_by('-data_criacao')
+        configuracoes = PersonalizedProduct.objects.all().order_by('-created_at')
         data = []
         
         for config in configuracoes:
@@ -347,8 +347,8 @@ def api_aplicar_template(request):
             return JsonResponse({'error': 'Template ID is required'}, status=400)
         
         try:
-            template = Template.objects.get(id=template_id, ativo=True)
-        except Template.DoesNotExist:
+            template = Product.objects.get(id=template_id, ativo=True)
+        except Product.DoesNotExist:
             return JsonResponse({'error': 'Template not found'}, status=404)
         
         # Parse estruturas_ids

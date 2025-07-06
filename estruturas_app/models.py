@@ -3,6 +3,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from datetime import date
+import json
 
 class Estrutura(models.Model):
     """
@@ -80,6 +81,12 @@ class Estrutura(models.Model):
     )
     documentacao_necessaria = models.TextField(
         help_text="Required documentation for setup"
+    )
+    
+    # Document URLs
+    url_documentos = models.URLField(
+        blank=True,
+        help_text="URL for structure documents and templates"
     )
     
     # Compliance and Reporting
@@ -187,142 +194,6 @@ class RegraValidacao(models.Model):
     
     def __str__(self):
         return f"{self.estrutura_a.nome} -> {self.estrutura_b.nome} ({self.get_tipo_relacionamento_display()})"
-
-
-class Template(models.Model):
-    """
-    Model representing pre-configured templates for specific business sectors.
-    Templates contain complete structure configurations that can be reused.
-    """
-    
-    CATEGORIAS = [
-        ('TECH', 'Technology'),
-        ('REAL_ESTATE', 'Real Estate'),
-        ('TRADING', 'Trading'),
-        ('FAMILY_OFFICE', 'Family Office'),
-        ('INVESTMENT', 'Investment'),
-        ('GENERAL', 'General'),
-    ]
-    
-    COMPLEXIDADE_TEMPLATE = [
-        ('BASIC', 'Basic Configuration'),
-        ('INTERMEDIATE', 'Intermediate Configuration'),
-        ('ADVANCED', 'Advanced Configuration'),
-        ('EXPERT', 'Expert Configuration'),
-    ]
-    
-    # Basic Information
-    nome = models.CharField(max_length=100, help_text="Template name")
-    categoria = models.CharField(
-        max_length=20, 
-        choices=CATEGORIAS,
-        help_text="Business sector category"
-    )
-    complexidade_template = models.CharField(
-        max_length=20,
-        choices=COMPLEXIDADE_TEMPLATE,
-        default='BASIC',
-        help_text="Template complexity level"
-    )
-    descricao = models.TextField(help_text="Detailed template description")
-    
-    # Configuration Data
-    configuracao = models.JSONField(
-        help_text="Complete structure configuration saved as JSON"
-    )
-    
-    # Cost and Time Information
-    custo_total = models.DecimalField(
-        max_digits=12, 
-        decimal_places=2,
-        help_text="Total cost for all structures in template"
-    )
-    tempo_total_implementacao = models.IntegerField(
-        help_text="Total implementation time in days"
-    )
-    
-    # Usage Statistics
-    uso_count = models.IntegerField(
-        default=0,
-        help_text="Number of times this template has been used"
-    )
-    
-    # Target Information
-    publico_alvo = models.TextField(
-        blank=True,
-        help_text="Target audience description"
-    )
-    casos_uso = models.TextField(
-        blank=True,
-        help_text="Common use cases for this template"
-    )
-    
-    # Metadata
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    ativo = models.BooleanField(default=True)
-    
-    class Meta:
-        verbose_name = "Configuration Template"
-        verbose_name_plural = "Configuration Templates"
-        ordering = ['-uso_count', 'nome']
-    
-    def __str__(self):
-        return f"{self.nome} ({self.get_categoria_display()})"
-    
-    def incrementar_uso(self):
-        """Increment usage counter"""
-        self.uso_count += 1
-        self.save(update_fields=['uso_count'])
-    
-    def get_estruturas_incluidas(self):
-        """Get list of structure IDs included in this template"""
-        try:
-            config = self.configuracao
-            if isinstance(config, str):
-                config = json.loads(config)
-            
-            elementos = config.get('elementos', [])
-            return [elemento.get('estrutura_id') for elemento in elementos if elemento.get('estrutura_id')]
-        except (json.JSONDecodeError, AttributeError):
-            return []
-
-
-class ConfiguracaoSalva(models.Model):
-    """
-    Model for saving user configurations that are not templates.
-    Allows users to save work in progress.
-    """
-    
-    nome = models.CharField(max_length=100, help_text="Configuration name")
-    descricao = models.TextField(blank=True, help_text="Configuration description")
-    configuracao = models.JSONField(help_text="Complete configuration data")
-    
-    # Cost and Time Information
-    custo_estimado = models.DecimalField(
-        max_digits=12, 
-        decimal_places=2,
-        null=True,
-        blank=True,
-        help_text="Estimated total cost"
-    )
-    tempo_estimado = models.IntegerField(
-        null=True,
-        blank=True,
-        help_text="Estimated implementation time in days"
-    )
-    
-    # Metadata
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        verbose_name = "Saved Configuration"
-        verbose_name_plural = "Saved Configurations"
-        ordering = ['-updated_at']
-    
-    def __str__(self):
-        return self.nome
 
 
 class AlertaJurisdicao(models.Model):
@@ -857,15 +728,6 @@ class Product(models.Model):
     Refatoração do modelo Template existente
     """
     
-    CATEGORIAS = [
-        ('TECH', 'Technology'),
-        ('REAL_ESTATE', 'Real Estate'),
-        ('TRADING', 'Trading'),
-        ('FAMILY_OFFICE', 'Family Office'),
-        ('INVESTMENT', 'Investment'),
-        ('GENERAL', 'General'),
-    ]
-    
     COMPLEXIDADE_PRODUCT = [
         ('BASIC', 'Basic Configuration'),
         ('INTERMEDIATE', 'Intermediate Configuration'),
@@ -875,11 +737,6 @@ class Product(models.Model):
     
     # Campos básicos (mantidos do Template)
     nome = models.CharField(max_length=100, help_text="Nome do produto")
-    categoria = models.CharField(
-        max_length=20,
-        choices=CATEGORIAS,
-        help_text="Categoria do produto"
-    )
     complexidade_template = models.CharField(
         max_length=20,
         choices=COMPLEXIDADE_PRODUCT,
@@ -895,6 +752,14 @@ class Product(models.Model):
     )
     master_agreement_url = models.URLField(
         help_text="URL para documento de Master Agreement"
+    )
+    
+    # Hierarquia de Legal Structures
+    legal_structures = models.ManyToManyField(
+        'Estrutura',
+        through='ProductHierarchy',
+        through_fields=('product', 'structure'),
+        help_text="Legal structures included in this product"
     )
     
     # Configuração e custos
@@ -941,7 +806,6 @@ class Product(models.Model):
         ordering = ['-uso_count', 'commercial_name']
         indexes = [
             models.Index(fields=['commercial_name']),
-            models.Index(fields=['categoria']),
             models.Index(fields=['ativo']),
         ]
     
@@ -981,6 +845,127 @@ class Product(models.Model):
             return self.get_custo_total_calculado()
         else:
             return self.custo_manual or 0
+
+
+class ProductHierarchy(models.Model):
+    """
+    Modelo intermediário para gerenciar hierarquia de Legal Structures dentro de um Product
+    """
+    
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        help_text="Product to which this hierarchy belongs"
+    )
+    structure = models.ForeignKey(
+        'Estrutura',
+        on_delete=models.CASCADE,
+        help_text="Legal Structure in this hierarchy"
+    )
+    parent_structure = models.ForeignKey(
+        'Estrutura',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='child_structures',
+        help_text="Parent structure (if this structure is owned by another)"
+    )
+    ownership_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0.01), MaxValueValidator(100.00)],
+        help_text="Percentage of ownership (optional)"
+    )
+    hierarchy_level = models.PositiveIntegerField(
+        default=1,
+        help_text="Level in hierarchy (1 = top level, 2 = second level, etc.)"
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Additional notes about this hierarchy relationship"
+    )
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Product Hierarchy"
+        verbose_name_plural = "Product Hierarchies"
+        unique_together = ['product', 'structure']
+        indexes = [
+            models.Index(fields=['product', 'hierarchy_level']),
+            models.Index(fields=['structure']),
+            models.Index(fields=['parent_structure']),
+        ]
+    
+    def __str__(self):
+        if self.parent_structure:
+            return f"{self.product.commercial_name}: {self.parent_structure.nome} owns {self.structure.nome}"
+        else:
+            return f"{self.product.commercial_name}: {self.structure.nome} (Top Level)"
+    
+    def clean(self):
+        """Validate hierarchy relationships"""
+        super().clean()
+        
+        # A structure cannot be its own parent
+        if self.parent_structure == self.structure:
+            raise ValidationError("A structure cannot be its own parent")
+        
+        # Check for circular references
+        if self.parent_structure:
+            current = self.parent_structure
+            visited = set()
+            while current:
+                if current == self.structure:
+                    raise ValidationError("Circular reference detected in hierarchy")
+                if current.id in visited:
+                    break
+                visited.add(current.id)
+                # Find parent of current structure in the same product
+                parent_rel = ProductHierarchy.objects.filter(
+                    product=self.product,
+                    structure=current
+                ).first()
+                current = parent_rel.parent_structure if parent_rel else None
+    
+    def get_children(self):
+        """Get all direct children of this structure in the same product"""
+        return ProductHierarchy.objects.filter(
+            product=self.product,
+            parent_structure=self.structure
+        )
+    
+    def get_all_descendants(self):
+        """Get all descendants (children, grandchildren, etc.) of this structure"""
+        descendants = []
+        children = self.get_children()
+        for child in children:
+            descendants.append(child)
+            descendants.extend(child.get_all_descendants())
+        return descendants
+    
+    def is_top_level(self):
+        """Check if this structure is at the top level (no parent)"""
+        return self.parent_structure is None
+    
+    def get_hierarchy_path(self):
+        """Get the full path from top to this structure"""
+        path = []
+        current = self
+        while current:
+            path.insert(0, current.structure.nome)
+            if current.parent_structure:
+                current = ProductHierarchy.objects.filter(
+                    product=current.product,
+                    structure=current.parent_structure
+                ).first()
+            else:
+                current = None
+        return " → ".join(path)
 
 
 class PersonalizedProduct(models.Model):
@@ -1028,11 +1013,11 @@ class PersonalizedProduct(models.Model):
         help_text="Legal Structure base para este produto personalizado"
     )
     
-    # Relacionamentos com UBOs
+    # Relacionamentos com UBOs - conexão direta
     ubos = models.ManyToManyField(
         UBO,
-        through='PersonalizedProductUBO',
-        help_text="UBOs associados a este produto personalizado"
+        blank=True,
+        help_text="UBOs associated with this personalized product"
     )
     
     # Versionamento
@@ -1152,112 +1137,29 @@ class PersonalizedProduct(models.Model):
         )
         
         # Copiar relacionamentos UBO
-        for pp_ubo in self.personalizedproductubo_set.all():
-            PersonalizedProductUBO.objects.create(
-                personalized_product=new_version,
-                ubo=pp_ubo.ubo,
-                ownership_percentage=pp_ubo.ownership_percentage,
-                role=pp_ubo.role,
-                data_inicio=pp_ubo.data_inicio,
-                ativo=pp_ubo.ativo
-            )
+        new_version.ubos.set(self.ubos.all())
         
         return new_version
     
     def get_ubos_ativos(self):
         """Retorna UBOs ativos associados"""
-        return self.ubos.filter(
-            personalizedproductubo__ativo=True
-        ).distinct()
+        return self.ubos.filter(ativo=True)
     
-    def get_total_ownership_percentage(self):
-        """Calcula percentual total de propriedade"""
-        total = self.personalizedproductubo_set.filter(
-            ativo=True
-        ).aggregate(
-            total=models.Sum('ownership_percentage')
-        )['total'] or 0
-        
-        return total
-
-
-class PersonalizedProductUBO(models.Model):
-    """
-    Modelo intermediário para relacionamento PersonalizedProduct-UBO
-    """
-    
-    ROLE_CHOICES = [
-        ('OWNER', 'Owner'),
-        ('BENEFICIARY', 'Beneficiary'),
-        ('DIRECTOR', 'Director'),
-        ('SHAREHOLDER', 'Shareholder'),
-        ('TRUSTEE', 'Trustee'),
-        ('OTHER', 'Other'),
-    ]
-    
-    personalized_product = models.ForeignKey(
-        PersonalizedProduct,
-        on_delete=models.CASCADE,
-        help_text="Produto personalizado"
-    )
-    ubo = models.ForeignKey(
-        UBO,
-        on_delete=models.CASCADE,
-        help_text="UBO associado"
-    )
-    ownership_percentage = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0.01), MaxValueValidator(100.00)],
-        help_text="Percentual de propriedade (opcional)"
-    )
-    role = models.CharField(
-        max_length=20,
-        choices=ROLE_CHOICES,
-        default='OWNER',
-        help_text="Papel do UBO neste produto"
-    )
-    data_inicio = models.DateField(
-        help_text="Data de início da associação"
-    )
-    data_fim = models.DateField(
-        null=True,
-        blank=True,
-        help_text="Data de fim da associação (opcional)"
-    )
-    observacoes = models.TextField(
-        blank=True,
-        help_text="Observações específicas desta associação"
-    )
-    ativo = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        verbose_name = "Personalized Product UBO"
-        verbose_name_plural = "Personalized Product UBOs"
-        unique_together = ['personalized_product', 'ubo', 'role']
-        indexes = [
-            models.Index(fields=['personalized_product', 'ativo']),
-            models.Index(fields=['ubo', 'ativo']),
-            models.Index(fields=['data_inicio']),
-        ]
-    
-    def __str__(self):
-        percentage_str = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
-        return f"{self.ubo.nome_completo} - {self.get_role_display()}{percentage_str}"
-    
-    def clean(self):
-        """Validações customizadas"""
-        super().clean()
-        
-        # Validar que data_fim é posterior a data_inicio
-        if self.data_fim and self.data_inicio and self.data_fim <= self.data_inicio:
-            raise ValidationError({
-                'data_fim': 'Data de fim deve ser posterior à data de início'
-            })
-
+    def get_first_level_structure(self):
+        """Retorna a primeira estrutura da hierarquia para conexão com UBOs"""
+        if self.base_structure:
+            return self.base_structure
+        elif self.base_product:
+            # Busca a estrutura de primeiro nível (sem parent) no product
+            try:
+                first_level = ProductHierarchy.objects.filter(
+                    product=self.base_product,
+                    parent_structure__isnull=True
+                ).first()
+                return first_level.structure if first_level else None
+            except:
+                return None
+        return None
 
 
 class Service(models.Model):
