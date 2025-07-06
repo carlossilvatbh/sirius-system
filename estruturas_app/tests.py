@@ -2,7 +2,7 @@ from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from datetime import date
-from .models import UBO, Successor, Product, PersonalizedProduct, PersonalizedProductUBO
+from .models import UBO, Successor, Product, PersonalizedProduct, PersonalizedProductUBO, Service, ServiceActivity, AlertaJurisdicao
 
 
 class UBOModelTest(TestCase):
@@ -1088,4 +1088,690 @@ class PersonalizedProductUBOModelTest(TestCase):
         """Testa nomes verbose da Meta class"""
         self.assertEqual(PersonalizedProductUBO._meta.verbose_name, "Personalized Product UBO")
         self.assertEqual(PersonalizedProductUBO._meta.verbose_name_plural, "Personalized Product UBOs")
+
+
+class ServiceModelTest(TestCase):
+    """Test cases for Service model"""
+    
+    def setUp(self):
+        """Set up test data"""
+        # Criar uma estrutura de teste
+        from .models import Estrutura
+        self.estrutura = Estrutura.objects.create(
+            nome='Test Structure',
+            tipo='WYOMING_DAO_LLC',
+            descricao='Test structure for service testing',
+            custo_base=5000.00,
+            custo_manutencao=1000.00,
+            tempo_implementacao=30,
+            complexidade=3,
+            impacto_tributario_eua='Test tax impact USA',
+            impacto_tributario_brasil='Test tax impact Brazil',
+            nivel_confidencialidade=3,
+            protecao_patrimonial=3,
+            impacto_privacidade='Test privacy impact',
+            facilidade_banking=3,
+            documentacao_necessaria='Test documentation required',
+            ativo=True
+        )
+        
+        # Criar Product de teste
+        self.product = Product.objects.create(
+            nome='Test Product',
+            categoria='TECH',
+            complexidade_template='BASIC',
+            descricao='Test product for service testing',
+            commercial_name='Test Commercial Product',
+            master_agreement_url='https://example.com/agreement',
+            configuracao={'test': 'config'},
+            custo_automatico=False,
+            custo_manual=5000.00,
+            tempo_total_implementacao=30,
+            ativo=True
+        )
+        
+        # Criar Service de teste
+        self.service = Service.objects.create(
+            service_name='Legal Formation Service',
+            description='Complete legal formation service for offshore structures',
+            service_type='LEGAL',
+            cost=2500.00,
+            estimated_duration=15,
+            requirements={'documents': ['passport', 'proof_of_address']},
+            deliverables={'certificates': ['incorporation', 'good_standing']},
+            status='ACTIVE',
+            associated_product=self.product,
+            ativo=True
+        )
+    
+    def test_service_creation(self):
+        """Test service creation with valid data"""
+        service = Service.objects.create(
+            service_name='Tax Compliance Service',
+            description='Annual tax compliance and filing service',
+            service_type='TAX',
+            cost=1500.00,
+            estimated_duration=10,
+            status='ACTIVE'
+        )
+        
+        self.assertEqual(service.service_name, 'Tax Compliance Service')
+        self.assertEqual(service.service_type, 'TAX')
+        self.assertEqual(service.cost, 1500.00)
+        self.assertEqual(service.status, 'ACTIVE')
+        self.assertTrue(service.ativo)
+    
+    def test_service_string_representation(self):
+        """Test service string representation"""
+        expected = f"{self.service.service_name} ({self.service.get_service_type_display()})"
+        self.assertEqual(str(self.service), expected)
+    
+    def test_service_association_type_product(self):
+        """Test get_association_type method with product"""
+        self.assertEqual(self.service.get_association_type(), "Product")
+    
+    def test_service_association_type_structure(self):
+        """Test get_association_type method with structure"""
+        service = Service.objects.create(
+            service_name='Structure Maintenance',
+            description='Annual structure maintenance service',
+            service_type='MAINTENANCE',
+            associated_structure=self.estrutura
+        )
+        self.assertEqual(service.get_association_type(), "Structure")
+    
+    def test_service_association_type_standalone(self):
+        """Test get_association_type method with no association"""
+        service = Service.objects.create(
+            service_name='Consulting Service',
+            description='General consulting service',
+            service_type='CONSULTING'
+        )
+        self.assertEqual(service.get_association_type(), "Standalone")
+    
+    def test_service_is_available_for_association(self):
+        """Test is_available_for_association method"""
+        # Active service should be available
+        self.assertTrue(self.service.is_available_for_association())
+        
+        # Inactive service should not be available
+        self.service.status = 'INACTIVE'
+        self.service.save()
+        self.assertFalse(self.service.is_available_for_association())
+        
+        # Draft service should not be available
+        self.service.status = 'DRAFT'
+        self.service.save()
+        self.assertFalse(self.service.is_available_for_association())
+    
+    def test_service_get_associated_entity(self):
+        """Test get_associated_entity method"""
+        # Service associated with product
+        self.assertEqual(self.service.associated_product, self.product)
+        
+        # Service associated with structure
+        service = Service.objects.create(
+            service_name='Structure Service',
+            description='Structure-specific service',
+            service_type='ADMINISTRATIVE',
+            associated_structure=self.estrutura
+        )
+        self.assertEqual(service.associated_structure, self.estrutura)
+        
+        # Standalone service
+        standalone_service = Service.objects.create(
+            service_name='Standalone Service',
+            description='Standalone service',
+            service_type='CONSULTING'
+        )
+        self.assertIsNone(standalone_service.associated_product)
+        self.assertIsNone(standalone_service.associated_structure)
+    
+    def test_service_create_personalized_service(self):
+        """Test create_personalized_service method"""
+        personalized = self.service.create_personalized_service()
+        
+        self.assertIsNotNone(personalized)
+        self.assertEqual(personalized.base_product, self.product)
+        self.assertEqual(personalized.status, 'DRAFT')
+        self.assertIn('service_id', personalized.configuracao_personalizada)
+        self.assertEqual(personalized.configuracao_personalizada['service_id'], self.service.id)
+    
+    def test_service_clean_validation(self):
+        """Test service clean method validation"""
+        # Test that service can be created without validation errors
+        service = Service(
+            service_name='Valid Service',
+            description='Service with valid data',
+            service_type='LEGAL',
+            associated_product=self.product
+        )
+        
+        # Should not raise ValidationError
+        try:
+            service.clean()
+        except ValidationError:
+            self.fail("Service.clean() raised ValidationError unexpectedly!")
+    
+    def test_service_cost_validation(self):
+        """Test service cost validation"""
+        # Test that service with valid cost can be created
+        service = Service(
+            service_name='Valid Cost Service',
+            description='Service with valid cost',
+            service_type='LEGAL',
+            cost=100.00
+        )
+        
+        # Should not raise ValidationError
+        try:
+            service.clean()
+        except ValidationError:
+            self.fail("Service.clean() raised ValidationError unexpectedly!")
+    
+    def test_service_duration_validation(self):
+        """Test service duration validation"""
+        # Test that service with valid duration can be created
+        service = Service(
+            service_name='Valid Duration Service',
+            description='Service with valid duration',
+            service_type='LEGAL',
+            estimated_duration=10
+        )
+        
+        # Should not raise ValidationError
+        try:
+            service.clean()
+        except ValidationError:
+            self.fail("Service.clean() raised ValidationError unexpectedly!")
+
+
+class ServiceActivityModelTest(TestCase):
+    """Test cases for ServiceActivity model"""
+    
+    def setUp(self):
+        """Set up test data"""
+        # Criar Service de teste
+        self.service = Service.objects.create(
+            service_name='Test Service',
+            description='Test service for activity testing',
+            service_type='LEGAL',
+            status='ACTIVE'
+        )
+        
+        # Criar ServiceActivity de teste
+        self.activity = ServiceActivity.objects.create(
+            service=self.service,
+            activity_title='Document Review',
+            activity_description='Review and validate client documents',
+            start_date=date(2024, 1, 15),
+            due_date=date(2024, 1, 30),
+            status='PLANNED',
+            priority='HIGH',
+            responsible_person='John Doe',
+            estimated_hours=8.0
+        )
+    
+    def test_activity_creation(self):
+        """Test activity creation with valid data"""
+        activity = ServiceActivity.objects.create(
+            service=self.service,
+            activity_title='Client Meeting',
+            activity_description='Initial consultation with client',
+            start_date=date(2024, 2, 1),
+            status='PLANNED',
+            priority='MEDIUM',
+            responsible_person='Jane Smith'
+        )
+        
+        self.assertEqual(activity.activity_title, 'Client Meeting')
+        self.assertEqual(activity.status, 'PLANNED')
+        self.assertEqual(activity.priority, 'MEDIUM')
+        self.assertTrue(activity.ativo)
+    
+    def test_activity_string_representation(self):
+        """Test activity string representation"""
+        expected = f"{self.activity.activity_title} - {self.service.service_name}"
+        self.assertEqual(str(self.activity), expected)
+    
+    def test_activity_is_overdue(self):
+        """Test is_overdue method"""
+        # Activity with past due date should be overdue
+        past_activity = ServiceActivity.objects.create(
+            service=self.service,
+            activity_title='Past Activity',
+            activity_description='Activity with past due date',
+            start_date=date(2023, 12, 1),
+            due_date=date(2023, 12, 15),
+            status='IN_PROGRESS',
+            priority='HIGH',
+            responsible_person='Test Person'
+        )
+        self.assertTrue(past_activity.is_overdue())
+        
+        # Activity with future due date should not be overdue
+        future_date = timezone.now().date() + timezone.timedelta(days=30)
+        future_activity = ServiceActivity.objects.create(
+            service=self.service,
+            activity_title='Future Activity',
+            activity_description='Activity with future due date',
+            start_date=timezone.now().date(),
+            due_date=future_date,
+            status='PLANNED',
+            priority='MEDIUM',
+            responsible_person='Test Person'
+        )
+        self.assertFalse(future_activity.is_overdue())
+        
+        # Activity without due date should not be overdue
+        no_due_activity = ServiceActivity.objects.create(
+            service=self.service,
+            activity_title='No Due Date Activity',
+            activity_description='Activity without due date',
+            start_date=timezone.now().date(),
+            status='PLANNED',
+            priority='LOW',
+            responsible_person='Test Person'
+        )
+        self.assertFalse(no_due_activity.is_overdue())
+    
+    def test_activity_get_progress_percentage(self):
+        """Test get_progress_percentage method"""
+        # Planned activity should be 0%
+        self.assertEqual(self.activity.get_progress_percentage(), 0)
+        
+        # In progress activity should be 50%
+        self.activity.status = 'IN_PROGRESS'
+        self.activity.save()
+        self.assertEqual(self.activity.get_progress_percentage(), 50)
+        
+        # Completed activity should be 100%
+        self.activity.status = 'COMPLETED'
+        self.activity.save()
+        self.assertEqual(self.activity.get_progress_percentage(), 100)
+        
+        # On hold activity should be 25%
+        self.activity.status = 'ON_HOLD'
+        self.activity.save()
+        self.assertEqual(self.activity.get_progress_percentage(), 25)
+        
+        # Cancelled activity should be 0%
+        self.activity.status = 'CANCELLED'
+        self.activity.save()
+        self.assertEqual(self.activity.get_progress_percentage(), 0)
+    
+    def test_activity_get_status_color(self):
+        """Test get_status_color method"""
+        # Test different status colors
+        status_colors = {
+            'PLANNED': '#6c757d',
+            'IN_PROGRESS': '#007bff',
+            'COMPLETED': '#28a745',
+            'ON_HOLD': '#ffc107',
+            'CANCELLED': '#dc3545'
+        }
+        
+        for status, expected_color in status_colors.items():
+            self.activity.status = status
+            self.activity.save()
+            self.assertEqual(self.activity.get_status_color(), expected_color)
+    
+    def test_activity_get_priority_color(self):
+        """Test get_priority_color method"""
+        # Test different priority colors
+        priority_colors = {
+            'LOW': '#28a745',
+            'MEDIUM': '#ffc107',
+            'HIGH': '#fd7e14',
+            'URGENT': '#dc3545'
+        }
+        
+        for priority, expected_color in priority_colors.items():
+            self.activity.priority = priority
+            self.activity.save()
+            self.assertEqual(self.activity.get_priority_color(), expected_color)
+    
+    def test_activity_mark_completed(self):
+        """Test mark_completed method"""
+        # Mark activity as completed
+        completion_date = date(2024, 1, 25)
+        self.activity.mark_completed(completion_date)
+        
+        self.assertEqual(self.activity.status, 'COMPLETED')
+        self.assertEqual(self.activity.completion_date, completion_date)
+        
+        # Mark completed without specific date (should use today)
+        new_activity = ServiceActivity.objects.create(
+            service=self.service,
+            activity_title='New Activity',
+            activity_description='Activity to be completed',
+            start_date=date(2024, 2, 1),
+            status='IN_PROGRESS',
+            priority='MEDIUM',
+            responsible_person='Test Person'
+        )
+        new_activity.mark_completed()
+        
+        self.assertEqual(new_activity.status, 'COMPLETED')
+        self.assertEqual(new_activity.completion_date, timezone.now().date())
+    
+    def test_activity_clean_validation(self):
+        """Test activity clean method validation"""
+        # Test that activity can be created without validation errors
+        activity = ServiceActivity(
+            service=self.service,
+            activity_title='Valid Activity',
+            activity_description='Activity with valid data',
+            start_date=date(2024, 1, 1),
+            completion_date=date(2024, 1, 15),
+            status='COMPLETED',
+            priority='MEDIUM',
+            responsible_person='Test Person'
+        )
+        
+        # Should not raise ValidationError
+        try:
+            activity.clean()
+        except ValidationError:
+            self.fail("ServiceActivity.clean() raised ValidationError unexpectedly!")
+        
+        # Test another valid activity
+        activity2 = ServiceActivity(
+            service=self.service,
+            activity_title='Valid Dates Activity',
+            activity_description='Activity with valid date range',
+            start_date=date(2024, 1, 1),
+            due_date=date(2024, 1, 15),
+            status='PLANNED',
+            priority='MEDIUM',
+            responsible_person='Test Person'
+        )
+        
+        # Should not raise ValidationError
+        try:
+            activity2.clean()
+        except ValidationError:
+            self.fail("ServiceActivity.clean() raised ValidationError unexpectedly!")
+
+
+class AlertaJurisdicaoModelTest(TestCase):
+    """Test cases for enhanced AlertaJurisdicao model"""
+    
+    def setUp(self):
+        """Set up test data"""
+        from .models import Estrutura
+        
+        # Criar estrutura de teste
+        self.estrutura = Estrutura.objects.create(
+            nome='Test Structure',
+            tipo='WYOMING_DAO_LLC',
+            descricao='Test structure for alert testing',
+            custo_base=5000.00,
+            custo_manutencao=1000.00,
+            tempo_implementacao=30,
+            complexidade=3,
+            impacto_tributario_eua='Test tax impact USA',
+            impacto_tributario_brasil='Test tax impact Brazil',
+            nivel_confidencialidade=3,
+            protecao_patrimonial=3,
+            impacto_privacidade='Test privacy impact',
+            facilidade_banking=3,
+            documentacao_necessaria='Test documentation required',
+            ativo=True
+        )
+        
+        # Criar UBO de teste
+        self.ubo = UBO.objects.create(
+            nome_completo='John Doe',
+            data_nascimento=date(1980, 5, 15),
+            nacionalidade='US',
+            tin='123456789',
+            email='john.doe@example.com',
+            ativo=True
+        )
+        
+        # Criar Service de teste
+        self.service = Service.objects.create(
+            service_name='Compliance Service',
+            description='Annual compliance service',
+            service_type='COMPLIANCE',
+            status='ACTIVE'
+        )
+        
+        # Criar AlertaJurisdicao de teste
+        self.alert = AlertaJurisdicao.objects.create(
+            titulo='Annual Tax Filing',
+            descricao='Annual corporate tax filing requirement',
+            jurisdicao='US',
+            tipo_alerta='TAX',
+            deadline_type='RECURRING',
+            recurrence_pattern='ANNUAL',
+            next_deadline=date(2024, 4, 15),
+            prioridade=4,
+            service_connection=self.service,
+            ativo=True
+        )
+        self.alert.estruturas_aplicaveis.add(self.estrutura)
+        self.alert.ubos_aplicaveis.add(self.ubo)
+    
+    def test_alert_creation(self):
+        """Test alert creation with enhanced fields"""
+        alert = AlertaJurisdicao.objects.create(
+            titulo='License Renewal',
+            descricao='Business license renewal requirement',
+            jurisdicao='BR',
+            tipo_alerta='RENEWAL',
+            deadline_type='SINGLE',
+            single_deadline=date(2024, 12, 31),
+            prioridade=3,
+            advance_notice_days=60,
+            template_url='https://example.com/template',
+            compliance_url='https://example.com/compliance'
+        )
+        
+        self.assertEqual(alert.titulo, 'License Renewal')
+        self.assertEqual(alert.deadline_type, 'SINGLE')
+        self.assertEqual(alert.single_deadline, date(2024, 12, 31))
+        self.assertEqual(alert.advance_notice_days, 60)
+        self.assertTrue(alert.ativo)
+    
+    def test_alert_string_representation(self):
+        """Test alert string representation"""
+        expected = f"{self.alert.get_jurisdicao_display()}: {self.alert.titulo}"
+        self.assertEqual(str(self.alert), expected)
+    
+    def test_alert_clean_validation_single_deadline(self):
+        """Test clean validation for single deadline type"""
+        # Single deadline without date should raise ValidationError
+        alert = AlertaJurisdicao(
+            titulo='Invalid Single Alert',
+            descricao='Alert without single deadline date',
+            jurisdicao='US',
+            tipo_alerta='DEADLINE',
+            deadline_type='SINGLE'
+        )
+        
+        with self.assertRaises(ValidationError):
+            alert.clean()
+        
+        # Single deadline with recurrence pattern should raise ValidationError
+        alert = AlertaJurisdicao(
+            titulo='Invalid Single Alert',
+            descricao='Alert with recurrence pattern',
+            jurisdicao='US',
+            tipo_alerta='DEADLINE',
+            deadline_type='SINGLE',
+            single_deadline=date(2024, 6, 1),
+            recurrence_pattern='MONTHLY'
+        )
+        
+        with self.assertRaises(ValidationError):
+            alert.clean()
+    
+    def test_alert_clean_validation_recurring_deadline(self):
+        """Test clean validation for recurring deadline type"""
+        # Recurring deadline without pattern should raise ValidationError
+        alert = AlertaJurisdicao(
+            titulo='Invalid Recurring Alert',
+            descricao='Alert without recurrence pattern',
+            jurisdicao='US',
+            tipo_alerta='DEADLINE',
+            deadline_type='RECURRING'
+        )
+        
+        with self.assertRaises(ValidationError):
+            alert.clean()
+        
+        # Recurring deadline with single deadline should raise ValidationError
+        alert = AlertaJurisdicao(
+            titulo='Invalid Recurring Alert',
+            descricao='Alert with single deadline',
+            jurisdicao='US',
+            tipo_alerta='DEADLINE',
+            deadline_type='RECURRING',
+            recurrence_pattern='MONTHLY',
+            single_deadline=date(2024, 6, 1)
+        )
+        
+        with self.assertRaises(ValidationError):
+            alert.clean()
+    
+    def test_alert_calculate_next_deadline(self):
+        """Test calculate_next_deadline method"""
+        # Test monthly recurrence
+        self.alert.recurrence_pattern = 'MONTHLY'
+        self.alert.last_completed = date(2024, 1, 15)
+        next_deadline = self.alert.calculate_next_deadline()
+        self.assertEqual(next_deadline, date(2024, 2, 15))
+        
+        # Test quarterly recurrence
+        self.alert.recurrence_pattern = 'QUARTERLY'
+        next_deadline = self.alert.calculate_next_deadline()
+        self.assertEqual(next_deadline, date(2024, 4, 15))
+        
+        # Test annual recurrence
+        self.alert.recurrence_pattern = 'ANNUAL'
+        next_deadline = self.alert.calculate_next_deadline()
+        self.assertEqual(next_deadline, date(2025, 1, 15))
+    
+    def test_alert_is_overdue(self):
+        """Test is_overdue method"""
+        # Alert with past deadline should be overdue
+        self.alert.next_deadline = date(2023, 12, 1)
+        self.alert.save()
+        self.assertTrue(self.alert.is_overdue())
+        
+        # Alert with future deadline should not be overdue
+        future_date = timezone.now().date() + timezone.timedelta(days=30)
+        self.alert.next_deadline = future_date
+        self.alert.save()
+        self.assertFalse(self.alert.is_overdue())
+        
+        # Alert without deadline should not be overdue
+        self.alert.next_deadline = None
+        self.alert.save()
+        self.assertFalse(self.alert.is_overdue())
+    
+    def test_alert_days_until_deadline(self):
+        """Test days_until_deadline method"""
+        # Set a future deadline
+        future_date = timezone.now().date() + timezone.timedelta(days=30)
+        self.alert.next_deadline = future_date
+        self.alert.save()
+        
+        self.assertEqual(self.alert.days_until_deadline(), 30)
+        
+        # Alert without deadline should return None
+        self.alert.next_deadline = None
+        self.alert.save()
+        self.assertIsNone(self.alert.days_until_deadline())
+    
+    def test_alert_needs_advance_notice(self):
+        """Test needs_advance_notice method"""
+        # Alert within advance notice period should need notice
+        notice_date = timezone.now().date() + timezone.timedelta(days=15)
+        self.alert.next_deadline = notice_date
+        self.alert.advance_notice_days = 30
+        self.alert.save()
+        
+        self.assertTrue(self.alert.needs_advance_notice())
+        
+        # Alert outside advance notice period should not need notice
+        far_date = timezone.now().date() + timezone.timedelta(days=60)
+        self.alert.next_deadline = far_date
+        self.alert.save()
+        
+        self.assertFalse(self.alert.needs_advance_notice())
+    
+    def test_alert_get_status_display(self):
+        """Test get_status_display method"""
+        # Test overdue status
+        self.alert.next_deadline = date(2023, 12, 1)
+        self.alert.save()
+        self.assertEqual(self.alert.get_status_display(), "Overdue")
+        
+        # Test due soon status
+        soon_date = timezone.now().date() + timezone.timedelta(days=15)
+        self.alert.next_deadline = soon_date
+        self.alert.advance_notice_days = 30
+        self.alert.save()
+        self.assertEqual(self.alert.get_status_display(), "Due Soon")
+        
+        # Test scheduled status
+        future_date = timezone.now().date() + timezone.timedelta(days=60)
+        self.alert.next_deadline = future_date
+        self.alert.save()
+        self.assertEqual(self.alert.get_status_display(), "Scheduled")
+        
+        # Test no deadline status
+        self.alert.next_deadline = None
+        self.alert.save()
+        self.assertEqual(self.alert.get_status_display(), "No Deadline")
+    
+    def test_alert_mark_completed(self):
+        """Test mark_completed method"""
+        # Mark alert as completed
+        completion_date = date(2024, 4, 15)
+        self.alert.mark_completed(completion_date)
+        
+        self.assertEqual(self.alert.last_completed, completion_date)
+        # Next deadline should be calculated for recurring alerts
+        self.assertIsNotNone(self.alert.next_deadline)
+        
+        # Mark completed without specific date (should use today)
+        self.alert.mark_completed()
+        self.assertEqual(self.alert.last_completed, timezone.now().date())
+    
+    def test_alert_get_applicable_entities(self):
+        """Test get_applicable_entities method"""
+        entities = self.alert.get_applicable_entities()
+        
+        self.assertIn(self.estrutura, entities)
+        self.assertIn(self.ubo, entities)
+        self.assertEqual(len(entities), 2)
+    
+    def test_alert_create_service_activity(self):
+        """Test create_service_activity method"""
+        activity = self.alert.create_service_activity(
+            activity_title="Custom Alert Activity",
+            responsible_person="Compliance Officer"
+        )
+        
+        self.assertIsNotNone(activity)
+        self.assertEqual(activity.service, self.service)
+        self.assertEqual(activity.activity_title, "Custom Alert Activity")
+        self.assertEqual(activity.responsible_person, "Compliance Officer")
+        self.assertEqual(activity.due_date, self.alert.next_deadline)
+        self.assertEqual(activity.priority, 'HIGH')  # Priority 4 maps to HIGH
+        
+        # Alert without service connection should return None
+        alert_no_service = AlertaJurisdicao.objects.create(
+            titulo='No Service Alert',
+            descricao='Alert without service connection',
+            jurisdicao='US',
+            tipo_alerta='COMPLIANCE'
+        )
+        
+        activity = alert_no_service.create_service_activity()
+        self.assertIsNone(activity)
 

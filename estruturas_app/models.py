@@ -328,6 +328,7 @@ class ConfiguracaoSalva(models.Model):
 class AlertaJurisdicao(models.Model):
     """
     Model for jurisdiction-specific alerts and compliance requirements.
+    Enhanced with deadline management, recurrence patterns, and service connections.
     """
     
     JURISDICOES = [
@@ -344,8 +345,25 @@ class AlertaJurisdicao(models.Model):
         ('REPORTING', 'Reporting Obligation'),
         ('DEADLINE', 'Important Deadline'),
         ('REGULATORY', 'Regulatory Change'),
+        ('RENEWAL', 'License/Registration Renewal'),
+        ('FILING', 'Required Filing'),
     ]
     
+    DEADLINE_TYPES = [
+        ('SINGLE', 'Single Deadline'),
+        ('RECURRING', 'Recurring Deadline'),
+    ]
+    
+    RECURRENCE_PATTERNS = [
+        ('MONTHLY', 'Monthly'),
+        ('QUARTERLY', 'Quarterly'),
+        ('SEMIANNUAL', 'Semiannual'),
+        ('ANNUAL', 'Annual'),
+        ('BIENNIAL', 'Biennial'),
+        ('CUSTOM', 'Custom Pattern'),
+    ]
+    
+    # Basic Information
     jurisdicao = models.CharField(
         max_length=10,
         choices=JURISDICOES,
@@ -361,9 +379,79 @@ class AlertaJurisdicao(models.Model):
     
     # Applicability
     estruturas_aplicaveis = models.ManyToManyField(
-        Estrutura,
+        'Estrutura',
         blank=True,
         help_text="Structures to which this alert applies"
+    )
+    
+    # UBO Relationships (NEW)
+    ubos_aplicaveis = models.ManyToManyField(
+        'UBO',
+        blank=True,
+        help_text="UBOs to which this alert applies"
+    )
+    
+    # Deadline Management (NEW)
+    deadline_type = models.CharField(
+        max_length=20,
+        choices=DEADLINE_TYPES,
+        default='SINGLE',
+        help_text="Type of deadline (single or recurring)"
+    )
+    single_deadline = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Single deadline date (for non-recurring alerts)"
+    )
+    recurrence_pattern = models.CharField(
+        max_length=20,
+        choices=RECURRENCE_PATTERNS,
+        null=True,
+        blank=True,
+        help_text="Pattern for recurring deadlines"
+    )
+    next_deadline = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Next calculated deadline date"
+    )
+    last_completed = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date when this alert was last completed"
+    )
+    
+    # Templates and Links (NEW)
+    template_url = models.URLField(
+        blank=True,
+        help_text="URL to template or form for this alert"
+    )
+    compliance_url = models.URLField(
+        blank=True,
+        help_text="URL to compliance information or portal"
+    )
+    
+    # Service Connection (NEW)
+    service_connection = models.ForeignKey(
+        'Service',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Associated service for this alert"
+    )
+    
+    # Advanced Configuration (NEW)
+    advance_notice_days = models.PositiveIntegerField(
+        default=30,
+        help_text="Days before deadline to trigger advance notice"
+    )
+    auto_calculate_next = models.BooleanField(
+        default=True,
+        help_text="Automatically calculate next deadline after completion"
+    )
+    custom_recurrence_config = models.JSONField(
+        default=dict,
+        help_text="Custom configuration for complex recurrence patterns"
     )
     
     # Priority and Status
@@ -381,10 +469,156 @@ class AlertaJurisdicao(models.Model):
     class Meta:
         verbose_name = "Jurisdiction Alert"
         verbose_name_plural = "Jurisdiction Alerts"
-        ordering = ['-prioridade', 'jurisdicao']
+        ordering = ['-prioridade', 'next_deadline', 'jurisdicao']
+        indexes = [
+            models.Index(fields=['jurisdicao', 'tipo_alerta']),
+            models.Index(fields=['next_deadline']),
+            models.Index(fields=['deadline_type']),
+            models.Index(fields=['prioridade']),
+            models.Index(fields=['ativo']),
+        ]
     
     def __str__(self):
         return f"{self.get_jurisdicao_display()}: {self.titulo}"
+    
+    def clean(self):
+        """Validate deadline configuration"""
+        if self.deadline_type == 'SINGLE':
+            if not self.single_deadline:
+                raise ValidationError(
+                    "Single deadline date is required for single deadline type"
+                )
+            if self.recurrence_pattern:
+                raise ValidationError(
+                    "Recurrence pattern should not be set for single deadline type"
+                )
+        elif self.deadline_type == 'RECURRING':
+            if not self.recurrence_pattern:
+                raise ValidationError(
+                    "Recurrence pattern is required for recurring deadline type"
+                )
+            if self.single_deadline:
+                raise ValidationError(
+                    "Single deadline should not be set for recurring deadline type"
+                )
+    
+    def calculate_next_deadline(self):
+        """Calculate the next deadline based on recurrence pattern"""
+        if self.deadline_type != 'RECURRING' or not self.recurrence_pattern:
+            return None
+        
+        from dateutil.relativedelta import relativedelta
+        
+        # Use last_completed as base, or current date if never completed
+        base_date = self.last_completed or timezone.now().date()
+        
+        if self.recurrence_pattern == 'MONTHLY':
+            return base_date + relativedelta(months=1)
+        elif self.recurrence_pattern == 'QUARTERLY':
+            return base_date + relativedelta(months=3)
+        elif self.recurrence_pattern == 'SEMIANNUAL':
+            return base_date + relativedelta(months=6)
+        elif self.recurrence_pattern == 'ANNUAL':
+            return base_date + relativedelta(years=1)
+        elif self.recurrence_pattern == 'BIENNIAL':
+            return base_date + relativedelta(years=2)
+        elif self.recurrence_pattern == 'CUSTOM':
+            # Handle custom patterns from custom_recurrence_config
+            config = self.custom_recurrence_config
+            if 'months' in config:
+                return base_date + relativedelta(months=config['months'])
+            elif 'days' in config:
+                return base_date + relativedelta(days=config['days'])
+        
+        return None
+    
+    def update_next_deadline(self):
+        """Update the next_deadline field based on calculation"""
+        if self.deadline_type == 'SINGLE':
+            self.next_deadline = self.single_deadline
+        elif self.deadline_type == 'RECURRING' and self.auto_calculate_next:
+            self.next_deadline = self.calculate_next_deadline()
+        
+        self.save(update_fields=['next_deadline'])
+    
+    def mark_completed(self, completion_date=None):
+        """Mark alert as completed and update next deadline"""
+        completion_date = completion_date or timezone.now().date()
+        self.last_completed = completion_date
+        
+        if self.deadline_type == 'RECURRING' and self.auto_calculate_next:
+            self.next_deadline = self.calculate_next_deadline()
+        
+        self.save(update_fields=['last_completed', 'next_deadline'])
+    
+    def is_overdue(self):
+        """Check if alert is overdue"""
+        if not self.next_deadline:
+            return False
+        return timezone.now().date() > self.next_deadline
+    
+    def days_until_deadline(self):
+        """Calculate days until next deadline"""
+        if not self.next_deadline:
+            return None
+        delta = self.next_deadline - timezone.now().date()
+        return delta.days
+    
+    def needs_advance_notice(self):
+        """Check if advance notice should be triggered"""
+        days_until = self.days_until_deadline()
+        if days_until is None:
+            return False
+        return 0 <= days_until <= self.advance_notice_days
+    
+    def get_status_display(self):
+        """Get human-readable status"""
+        if self.is_overdue():
+            return "Overdue"
+        elif self.needs_advance_notice():
+            return "Due Soon"
+        elif self.next_deadline:
+            return "Scheduled"
+        else:
+            return "No Deadline"
+    
+    def get_status_color(self):
+        """Get color code for status display"""
+        if self.is_overdue():
+            return '#dc3545'  # Red
+        elif self.needs_advance_notice():
+            return '#ffc107'  # Yellow
+        elif self.next_deadline:
+            return '#28a745'  # Green
+        else:
+            return '#6c757d'  # Gray
+    
+    def get_applicable_entities(self):
+        """Get all entities (structures and UBOs) this alert applies to"""
+        entities = []
+        entities.extend(list(self.estruturas_aplicaveis.all()))
+        entities.extend(list(self.ubos_aplicaveis.all()))
+        return entities
+    
+    def create_service_activity(self, activity_title=None, responsible_person=None):
+        """Create a ServiceActivity if this alert is connected to a service"""
+        if not self.service_connection:
+            return None
+        
+        from .models import ServiceActivity
+        
+        activity = ServiceActivity.objects.create(
+            service=self.service_connection,
+            activity_title=activity_title or f"Alert: {self.titulo}",
+            activity_description=f"Compliance activity for {self.titulo}. {self.descricao}",
+            start_date=timezone.now().date(),
+            due_date=self.next_deadline,
+            status='PLANNED',
+            priority='HIGH' if self.prioridade >= 4 else 'MEDIUM',
+            responsible_person=responsible_person or 'Compliance Team'
+        )
+        
+        return activity
 
 
 
@@ -1023,4 +1257,376 @@ class PersonalizedProductUBO(models.Model):
             raise ValidationError({
                 'data_fim': 'Data de fim deve ser posterior à data de início'
             })
+
+
+
+class Service(models.Model):
+    """
+    Model representing services that can be associated with Products or Legal Structures.
+    Services can be transformed into PersonalizedProducts when associated with specific entities.
+    """
+    
+    SERVICE_TYPES = [
+        ('LEGAL', 'Legal'),
+        ('TAX', 'Tax'),
+        ('COMPLIANCE', 'Compliance'),
+        ('ADMINISTRATIVE', 'Administrative'),
+        ('CONSULTING', 'Consulting'),
+        ('FORMATION', 'Formation'),
+        ('MAINTENANCE', 'Maintenance'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('ACTIVE', 'Active'),
+        ('INACTIVE', 'Inactive'),
+        ('DRAFT', 'Draft'),
+        ('ARCHIVED', 'Archived'),
+    ]
+    
+    # Basic Information
+    service_name = models.CharField(
+        max_length=200,
+        help_text="Name of the service"
+    )
+    description = models.TextField(
+        help_text="Detailed description of the service"
+    )
+    service_type = models.CharField(
+        max_length=20,
+        choices=SERVICE_TYPES,
+        help_text="Type of service provided"
+    )
+    
+    # Cost and Duration
+    cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Cost of the service (optional)"
+    )
+    estimated_duration = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Estimated duration in days"
+    )
+    
+    # Optional Associations
+    associated_product = models.ForeignKey(
+        'Product',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="Product this service is associated with (optional)"
+    )
+    associated_structure = models.ForeignKey(
+        'Estrutura',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="Legal Structure this service is associated with (optional)"
+    )
+    
+    # Service Configuration
+    requirements = models.JSONField(
+        default=dict,
+        help_text="Service requirements and prerequisites"
+    )
+    deliverables = models.JSONField(
+        default=dict,
+        help_text="Expected deliverables and outcomes"
+    )
+    
+    # Status and Metadata
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='DRAFT',
+        help_text="Current status of the service"
+    )
+    ativo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Service"
+        verbose_name_plural = "Services"
+        ordering = ['service_name']
+        indexes = [
+            models.Index(fields=['service_type']),
+            models.Index(fields=['status']),
+            models.Index(fields=['associated_product']),
+            models.Index(fields=['associated_structure']),
+            models.Index(fields=['ativo']),
+        ]
+    
+    def __str__(self):
+        return f"{self.service_name} ({self.get_service_type_display()})"
+    
+    def clean(self):
+        """Validate that service has at most one association"""
+        if self.associated_product and self.associated_structure:
+            raise ValidationError(
+                "Service cannot be associated with both Product and Structure simultaneously"
+            )
+    
+    def get_association_type(self):
+        """Return the type of association (Product, Structure, or None)"""
+        if self.associated_product:
+            return "Product"
+        elif self.associated_structure:
+            return "Structure"
+        return "Standalone"
+    
+    def get_associated_object(self):
+        """Return the associated object (Product or Structure)"""
+        if self.associated_product:
+            return self.associated_product
+        elif self.associated_structure:
+            return self.associated_structure
+        return None
+    
+    def create_personalized_service(self, ubos=None, custom_config=None):
+        """
+        Create a PersonalizedProduct based on this Service.
+        This method transforms a Service into a PersonalizedProduct when needed.
+        """
+        from .models import PersonalizedProduct, PersonalizedProductUBO
+        
+        # Create PersonalizedProduct based on Service
+        personalized_data = {
+            'nome': f"Service: {self.service_name}",
+            'descricao': f"Personalized service based on {self.service_name}. {self.description}",
+            'status': 'DRAFT',
+            'configuracao_personalizada': {
+                'service_id': self.id,
+                'service_type': self.service_type,
+                'requirements': self.requirements,
+                'deliverables': self.deliverables,
+                'estimated_duration': self.estimated_duration,
+                **(custom_config or {})
+            }
+        }
+        
+        # Set base association
+        if self.associated_product:
+            personalized_data['base_product'] = self.associated_product
+        elif self.associated_structure:
+            personalized_data['base_structure'] = self.associated_structure
+        
+        # Set custom cost if available
+        if self.cost:
+            personalized_data['custo_personalizado'] = self.cost
+        
+        personalized_product = PersonalizedProduct.objects.create(**personalized_data)
+        
+        # Associate UBOs if provided
+        if ubos:
+            for ubo_data in ubos:
+                PersonalizedProductUBO.objects.create(
+                    personalized_product=personalized_product,
+                    ubo=ubo_data['ubo'],
+                    ownership_percentage=ubo_data.get('percentage'),
+                    role=ubo_data.get('role', 'OWNER'),
+                    data_inicio=ubo_data.get('start_date', timezone.now().date())
+                )
+        
+        return personalized_product
+    
+    def get_total_cost(self):
+        """Calculate total cost including associated entity costs"""
+        total = self.cost or 0
+        
+        if self.associated_product:
+            total += self.associated_product.get_custo_total()
+        elif self.associated_structure:
+            total += self.associated_structure.get_custo_total_primeiro_ano()
+        
+        return total
+    
+    def is_available_for_association(self):
+        """Check if service is available for new associations"""
+        return self.status == 'ACTIVE' and self.ativo
+    
+    def get_service_activities(self):
+        """Get all activities associated with this service"""
+        return self.serviceactivity_set.filter(ativo=True).order_by('-start_date')
+
+
+class ServiceActivity(models.Model):
+    """
+    Model for tracking specific activities performed within a Service.
+    Allows detailed tracking of service execution and progress.
+    """
+    
+    ACTIVITY_STATUS = [
+        ('PLANNED', 'Planned'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('COMPLETED', 'Completed'),
+        ('ON_HOLD', 'On Hold'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+    
+    PRIORITY_LEVELS = [
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('URGENT', 'Urgent'),
+    ]
+    
+    # Relationships
+    service = models.ForeignKey(
+        Service,
+        on_delete=models.CASCADE,
+        help_text="Service this activity belongs to"
+    )
+    
+    # Activity Information
+    activity_description = models.TextField(
+        help_text="Detailed description of the activity"
+    )
+    activity_title = models.CharField(
+        max_length=200,
+        help_text="Short title for the activity"
+    )
+    
+    # Dates and Timeline
+    start_date = models.DateField(
+        help_text="Planned or actual start date"
+    )
+    completion_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Actual completion date (optional)"
+    )
+    due_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Due date for completion (optional)"
+    )
+    
+    # Status and Priority
+    status = models.CharField(
+        max_length=20,
+        choices=ACTIVITY_STATUS,
+        default='PLANNED',
+        help_text="Current status of the activity"
+    )
+    priority = models.CharField(
+        max_length=10,
+        choices=PRIORITY_LEVELS,
+        default='MEDIUM',
+        help_text="Priority level of the activity"
+    )
+    
+    # Responsibility and Notes
+    responsible_person = models.CharField(
+        max_length=200,
+        help_text="Person responsible for this activity"
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Additional notes and observations"
+    )
+    
+    # Cost and Effort
+    estimated_hours = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Estimated hours for completion"
+    )
+    actual_hours = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Actual hours spent"
+    )
+    
+    # Metadata
+    ativo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Service Activity"
+        verbose_name_plural = "Service Activities"
+        ordering = ['-start_date', 'priority']
+        indexes = [
+            models.Index(fields=['service', 'status']),
+            models.Index(fields=['start_date']),
+            models.Index(fields=['due_date']),
+            models.Index(fields=['status']),
+            models.Index(fields=['priority']),
+            models.Index(fields=['responsible_person']),
+        ]
+    
+    def __str__(self):
+        return f"{self.activity_title} - {self.service.service_name}"
+    
+    def clean(self):
+        """Validate activity dates"""
+        if self.completion_date and self.start_date:
+            if self.completion_date < self.start_date:
+                raise ValidationError(
+                    "Completion date cannot be earlier than start date"
+                )
+        
+        if self.due_date and self.start_date:
+            if self.due_date < self.start_date:
+                raise ValidationError(
+                    "Due date cannot be earlier than start date"
+                )
+    
+    def is_overdue(self):
+        """Check if activity is overdue"""
+        if not self.due_date or self.status == 'COMPLETED':
+            return False
+        return timezone.now().date() > self.due_date
+    
+    def get_progress_percentage(self):
+        """Calculate progress percentage based on status"""
+        status_progress = {
+            'PLANNED': 0,
+            'IN_PROGRESS': 50,
+            'COMPLETED': 100,
+            'ON_HOLD': 25,
+            'CANCELLED': 0,
+        }
+        return status_progress.get(self.status, 0)
+    
+    def get_duration_days(self):
+        """Calculate duration in days if completed"""
+        if self.completion_date and self.start_date:
+            return (self.completion_date - self.start_date).days
+        return None
+    
+    def mark_completed(self, completion_date=None):
+        """Mark activity as completed with optional completion date"""
+        self.status = 'COMPLETED'
+        self.completion_date = completion_date or timezone.now().date()
+        self.save()
+    
+    def get_status_color(self):
+        """Return color code for status display"""
+        colors = {
+            'PLANNED': '#6c757d',      # Gray
+            'IN_PROGRESS': '#007bff',  # Blue
+            'COMPLETED': '#28a745',    # Green
+            'ON_HOLD': '#ffc107',      # Yellow
+            'CANCELLED': '#dc3545',    # Red
+        }
+        return colors.get(self.status, '#6c757d')
+    
+    def get_priority_color(self):
+        """Return color code for priority display"""
+        colors = {
+            'LOW': '#28a745',      # Green
+            'MEDIUM': '#ffc107',   # Yellow
+            'HIGH': '#fd7e14',     # Orange
+            'URGENT': '#dc3545',   # Red
+        }
+        return colors.get(self.priority, '#6c757d')
 

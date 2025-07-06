@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Estrutura, RegraValidacao, Template, ConfiguracaoSalva, AlertaJurisdicao, UBO, Successor, Product, PersonalizedProduct, PersonalizedProductUBO
+from .models import Estrutura, RegraValidacao, Template, ConfiguracaoSalva, AlertaJurisdicao, UBO, Successor, Product, PersonalizedProduct, PersonalizedProductUBO, Service, ServiceActivity
 
 
 @admin.register(Estrutura)
@@ -225,55 +225,6 @@ class ConfiguracaoSalvaAdmin(admin.ModelAdmin):
         return "-"
     custo_estimado_formatted.short_description = "Estimated Cost"
     custo_estimado_formatted.admin_order_field = 'custo_estimado'
-
-
-@admin.register(AlertaJurisdicao)
-class AlertaJurisdicaoAdmin(admin.ModelAdmin):
-    """
-    Admin interface for managing jurisdiction-specific alerts.
-    """
-    list_display = [
-        'titulo',
-        'jurisdicao',
-        'tipo_alerta',
-        'prioridade_display',
-        'ativo'
-    ]
-    list_filter = [
-        'jurisdicao',
-        'tipo_alerta',
-        'prioridade',
-        'ativo'
-    ]
-    search_fields = ['titulo', 'descricao']
-    filter_horizontal = ['estruturas_aplicaveis']
-    readonly_fields = ['created_at', 'updated_at']
-    
-    fieldsets = (
-        ('Alert Information', {
-            'fields': ('titulo', 'descricao', 'jurisdicao', 'tipo_alerta')
-        }),
-        ('Applicability', {
-            'fields': ('estruturas_aplicaveis',)
-        }),
-        ('Priority & Status', {
-            'fields': ('prioridade', 'ativo')
-        }),
-        ('Metadata', {
-            'fields': ('created_at', 'updated_at')
-        }),
-    )
-    
-    def prioridade_display(self, obj):
-        colors = {1: 'green', 2: 'lightgreen', 3: 'orange', 4: 'red', 5: 'darkred'}
-        color = colors.get(obj.prioridade, 'gray')
-        return format_html(
-            '<span style="color: {};">Priority {}</span>',
-            color,
-            obj.prioridade
-        )
-    prioridade_display.short_description = "Priority"
-    prioridade_display.admin_order_field = 'prioridade'
 
 
 # Customize admin site header and title
@@ -829,4 +780,415 @@ class PersonalizedProductUBOAdmin(admin.ModelAdmin):
             'personalized_product',
             'ubo'
         )
+
+
+
+class ServiceActivityInline(admin.TabularInline):
+    """Inline for managing ServiceActivity within Service admin"""
+    model = ServiceActivity
+    extra = 0
+    fields = [
+        'activity_title', 'start_date', 'due_date', 'status', 
+        'priority', 'responsible_person', 'estimated_hours'
+    ]
+    readonly_fields = ['created_at']
+
+
+@admin.register(Service)
+class ServiceAdmin(admin.ModelAdmin):
+    """Admin configuration for Service model"""
+    
+    list_display = [
+        'service_name', 'service_type', 'get_association_display', 
+        'cost', 'estimated_duration', 'status', 'ativo'
+    ]
+    list_filter = [
+        'service_type', 'status', 'ativo', 'created_at',
+        ('associated_product', admin.RelatedOnlyFieldListFilter),
+        ('associated_structure', admin.RelatedOnlyFieldListFilter),
+    ]
+    search_fields = [
+        'service_name', 'description', 'associated_product__nome',
+        'associated_structure__nome'
+    ]
+    autocomplete_fields = ['associated_product', 'associated_structure']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': (
+                'service_name', 'description', 'service_type', 'status'
+            )
+        }),
+        ('Cost and Duration', {
+            'fields': (
+                'cost', 'estimated_duration'
+            )
+        }),
+        ('Associations', {
+            'fields': (
+                'associated_product', 'associated_structure'
+            ),
+            'description': 'Associate this service with a Product OR Structure (not both)'
+        }),
+        ('Configuration', {
+            'fields': (
+                'requirements', 'deliverables'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Status', {
+            'fields': (
+                'ativo',
+            )
+        }),
+    )
+    
+    readonly_fields = ['created_at', 'updated_at']
+    inlines = [ServiceActivityInline]
+    
+    actions = ['activate_services', 'deactivate_services', 'create_personalized_services']
+    
+    def get_association_display(self, obj):
+        """Display the association type and object"""
+        association_type = obj.get_association_type()
+        if association_type == "Product":
+            return format_html(
+                '<span style="color: #007bff;">📦 {}</span>',
+                obj.associated_product.nome
+            )
+        elif association_type == "Structure":
+            return format_html(
+                '<span style="color: #28a745;">🏢 {}</span>',
+                obj.associated_structure.nome
+            )
+        else:
+            return format_html(
+                '<span style="color: #6c757d;">🔧 Standalone</span>'
+            )
+    get_association_display.short_description = 'Association'
+    
+    def activate_services(self, request, queryset):
+        """Activate selected services"""
+        updated = queryset.update(status='ACTIVE', ativo=True)
+        self.message_user(
+            request,
+            f'{updated} services were successfully activated.'
+        )
+    activate_services.short_description = "Activate selected services"
+    
+    def deactivate_services(self, request, queryset):
+        """Deactivate selected services"""
+        updated = queryset.update(status='INACTIVE', ativo=False)
+        self.message_user(
+            request,
+            f'{updated} services were successfully deactivated.'
+        )
+    deactivate_services.short_description = "Deactivate selected services"
+    
+    def create_personalized_services(self, request, queryset):
+        """Create PersonalizedProducts from selected services"""
+        created_count = 0
+        for service in queryset:
+            if service.is_available_for_association():
+                service.create_personalized_service()
+                created_count += 1
+        
+        self.message_user(
+            request,
+            f'{created_count} PersonalizedProducts were created from services.'
+        )
+    create_personalized_services.short_description = "Create PersonalizedProducts from services"
+
+
+@admin.register(ServiceActivity)
+class ServiceActivityAdmin(admin.ModelAdmin):
+    """Admin configuration for ServiceActivity model"""
+    
+    list_display = [
+        'activity_title', 'service', 'start_date', 'due_date', 
+        'get_status_display', 'get_priority_display', 'responsible_person',
+        'get_progress_display'
+    ]
+    list_filter = [
+        'status', 'priority', 'start_date', 'due_date', 'ativo',
+        ('service', admin.RelatedOnlyFieldListFilter),
+    ]
+    search_fields = [
+        'activity_title', 'activity_description', 'responsible_person',
+        'service__service_name'
+    ]
+    autocomplete_fields = ['service']
+    date_hierarchy = 'start_date'
+    
+    fieldsets = (
+        ('Activity Information', {
+            'fields': (
+                'service', 'activity_title', 'activity_description'
+            )
+        }),
+        ('Timeline', {
+            'fields': (
+                'start_date', 'due_date', 'completion_date'
+            )
+        }),
+        ('Status and Priority', {
+            'fields': (
+                'status', 'priority'
+            )
+        }),
+        ('Responsibility and Effort', {
+            'fields': (
+                'responsible_person', 'estimated_hours', 'actual_hours'
+            )
+        }),
+        ('Notes', {
+            'fields': (
+                'notes',
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Status', {
+            'fields': (
+                'ativo',
+            )
+        }),
+    )
+    
+    readonly_fields = ['created_at', 'updated_at']
+    
+    actions = ['mark_completed', 'mark_in_progress', 'mark_on_hold']
+    
+    def get_status_display(self, obj):
+        """Display status with color coding"""
+        color = obj.get_status_color()
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">●</span> {}',
+            color, obj.get_status_display()
+        )
+    get_status_display.short_description = 'Status'
+    
+    def get_priority_display(self, obj):
+        """Display priority with color coding"""
+        color = obj.get_priority_color()
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">●</span> {}',
+            color, obj.get_priority_display()
+        )
+    get_priority_display.short_description = 'Priority'
+    
+    def get_progress_display(self, obj):
+        """Display progress percentage"""
+        progress = obj.get_progress_percentage()
+        if progress == 100:
+            color = '#28a745'  # Green
+        elif progress >= 50:
+            color = '#ffc107'  # Yellow
+        else:
+            color = '#6c757d'  # Gray
+        
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{}%</span>',
+            color, progress
+        )
+    get_progress_display.short_description = 'Progress'
+    
+    def mark_completed(self, request, queryset):
+        """Mark selected activities as completed"""
+        from django.utils import timezone
+        updated = queryset.update(
+            status='COMPLETED',
+            completion_date=timezone.now().date()
+        )
+        self.message_user(
+            request,
+            f'{updated} activities were marked as completed.'
+        )
+    mark_completed.short_description = "Mark as completed"
+    
+    def mark_in_progress(self, request, queryset):
+        """Mark selected activities as in progress"""
+        updated = queryset.update(status='IN_PROGRESS')
+        self.message_user(
+            request,
+            f'{updated} activities were marked as in progress.'
+        )
+    mark_in_progress.short_description = "Mark as in progress"
+    
+    def mark_on_hold(self, request, queryset):
+        """Mark selected activities as on hold"""
+        updated = queryset.update(status='ON_HOLD')
+        self.message_user(
+            request,
+            f'{updated} activities were marked as on hold.'
+        )
+    mark_on_hold.short_description = "Mark as on hold"
+
+
+# Update AlertaJurisdicaoAdmin with new fields
+@admin.register(AlertaJurisdicao)
+class AlertaJurisdicaoAdmin(admin.ModelAdmin):
+    """Enhanced admin configuration for AlertaJurisdicao model"""
+    
+    list_display = [
+        'titulo', 'jurisdicao', 'tipo_alerta', 'get_deadline_display',
+        'get_status_display', 'prioridade', 'ativo'
+    ]
+    list_filter = [
+        'jurisdicao', 'tipo_alerta', 'deadline_type', 'prioridade', 
+        'ativo', 'next_deadline', 'recurrence_pattern',
+        ('service_connection', admin.RelatedOnlyFieldListFilter),
+    ]
+    search_fields = [
+        'titulo', 'descricao', 'estruturas_aplicaveis__nome',
+        'ubos_aplicaveis__nome_completo'
+    ]
+    autocomplete_fields = ['estruturas_aplicaveis', 'ubos_aplicaveis', 'service_connection']
+    date_hierarchy = 'next_deadline'
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': (
+                'titulo', 'descricao', 'jurisdicao', 'tipo_alerta', 'prioridade'
+            )
+        }),
+        ('Applicability', {
+            'fields': (
+                'estruturas_aplicaveis', 'ubos_aplicaveis'
+            )
+        }),
+        ('Deadline Configuration', {
+            'fields': (
+                'deadline_type', 'single_deadline', 'recurrence_pattern',
+                'advance_notice_days', 'auto_calculate_next'
+            )
+        }),
+        ('Calculated Deadlines', {
+            'fields': (
+                'next_deadline', 'last_completed'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Templates and Links', {
+            'fields': (
+                'template_url', 'compliance_url'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Service Integration', {
+            'fields': (
+                'service_connection',
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Advanced Configuration', {
+            'fields': (
+                'custom_recurrence_config',
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Status', {
+            'fields': (
+                'ativo',
+            )
+        }),
+    )
+    
+    readonly_fields = ['created_at', 'updated_at']
+    
+    actions = [
+        'mark_completed', 'update_next_deadlines', 'create_service_activities',
+        'activate_alerts', 'deactivate_alerts'
+    ]
+    
+    def get_deadline_display(self, obj):
+        """Display next deadline with formatting"""
+        if not obj.next_deadline:
+            return format_html('<span style="color: #6c757d;">No deadline</span>')
+        
+        days_until = obj.days_until_deadline()
+        if obj.is_overdue():
+            return format_html(
+                '<span style="color: #dc3545; font-weight: bold;">⚠️ {} (Overdue)</span>',
+                obj.next_deadline.strftime('%Y-%m-%d')
+            )
+        elif obj.needs_advance_notice():
+            return format_html(
+                '<span style="color: #ffc107; font-weight: bold;">⏰ {} ({} days)</span>',
+                obj.next_deadline.strftime('%Y-%m-%d'), days_until
+            )
+        else:
+            return format_html(
+                '<span style="color: #28a745;">📅 {}</span>',
+                obj.next_deadline.strftime('%Y-%m-%d')
+            )
+    get_deadline_display.short_description = 'Next Deadline'
+    
+    def get_status_display(self, obj):
+        """Display status with color coding"""
+        status = obj.get_status_display()
+        color = obj.get_status_color()
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">●</span> {}',
+            color, status
+        )
+    get_status_display.short_description = 'Status'
+    
+    def mark_completed(self, request, queryset):
+        """Mark selected alerts as completed"""
+        from django.utils import timezone
+        updated_count = 0
+        for alert in queryset:
+            alert.mark_completed()
+            updated_count += 1
+        
+        self.message_user(
+            request,
+            f'{updated_count} alerts were marked as completed and next deadlines updated.'
+        )
+    mark_completed.short_description = "Mark as completed"
+    
+    def update_next_deadlines(self, request, queryset):
+        """Update next deadlines for selected alerts"""
+        updated_count = 0
+        for alert in queryset:
+            alert.update_next_deadline()
+            updated_count += 1
+        
+        self.message_user(
+            request,
+            f'Next deadlines updated for {updated_count} alerts.'
+        )
+    update_next_deadlines.short_description = "Update next deadlines"
+    
+    def create_service_activities(self, request, queryset):
+        """Create service activities for alerts with service connections"""
+        created_count = 0
+        for alert in queryset.filter(service_connection__isnull=False):
+            activity = alert.create_service_activity()
+            if activity:
+                created_count += 1
+        
+        self.message_user(
+            request,
+            f'{created_count} service activities were created from alerts.'
+        )
+    create_service_activities.short_description = "Create service activities"
+    
+    def activate_alerts(self, request, queryset):
+        """Activate selected alerts"""
+        updated = queryset.update(ativo=True)
+        self.message_user(
+            request,
+            f'{updated} alerts were successfully activated.'
+        )
+    activate_alerts.short_description = "Activate selected alerts"
+    
+    def deactivate_alerts(self, request, queryset):
+        """Deactivate selected alerts"""
+        updated = queryset.update(ativo=False)
+        self.message_user(
+            request,
+            f'{updated} alerts were successfully deactivated.'
+        )
+    deactivate_alerts.short_description = "Deactivate selected alerts"
 
