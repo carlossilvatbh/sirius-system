@@ -14,7 +14,7 @@
       </div>
       
       <div class="node-title">
-        <h3 class="font-semibold text-sm text-gray-900 truncate">
+        <h3 class="font-semibold text-sm text-gray-900 whitespace-nowrap">
           {{ structure.nome }}
         </h3>
         <p class="text-xs text-gray-500 truncate">

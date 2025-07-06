@@ -1,4 +1,4 @@
-import type { LegalStructure, StructureType } from '@/types';
+import type { LegalStructure, StructureType } from '../types';
 
 // ID Generation
 export function generateId(): string {

@@ -21,7 +21,7 @@ class ApiService {
   private cache: Map<string, { data: any; timestamp: number; ttl: number }>;
   private defaultTTL = 5 * 60 * 1000; // 5 minutes
 
-  constructor(baseURL: string = '/estruturas/api') {
+  constructor(baseURL: string = '/api') {
     this.baseURL = baseURL;
     this.cache = new Map();
   }

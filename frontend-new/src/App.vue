@@ -16,10 +16,15 @@
         <SiriusCanvas class="canvas-area" />
         
         <!-- Right Panel - Validation & Information -->
-        <div class="right-panel" v-if="showRightPanel">
+        <div class="right-panel">
           <ValidationPanel 
-          :results="validationStore.validationResults || { isValid: true, score: 0, errors: [], warnings: [], suggestions: [] }" 
-        />
+            v-if="showRightPanel"
+            :results="validationStore.validationResults || { isValid: true, score: 0, errors: [], warnings: [], suggestions: [] }" 
+          />
+          <InformationPanel
+            v-if="selectedStructure"
+            :structure="selectedStructure"
+          />
         </div>
       </main>
     </div>
@@ -72,6 +77,7 @@ import AppHeader from '@/components/layout/AppHeader.vue';
 import AppSidebar from '@/components/layout/AppSidebar.vue';
 import SiriusCanvas from '@/components/canvas/SiriusCanvas.vue';
 import ValidationPanel from '@/components/canvas/ValidationPanel.vue';
+import InformationPanel from '@/components/layout/InformationPanel.vue';
 
 // Stores
 const siriusStore = useSiriusStore();
@@ -81,6 +87,7 @@ const validationStore = useValidationStore();
 const persistenceStore = usePersistenceStore();
 
 // Computed properties
+const selectedStructure = computed(() => siriusStore.selectedStructure);
 const sidebarOpen = computed(() => siriusStore.sidebarOpen);
 const loading = computed(() => structuresStore.isLoading);
 const error = computed(() => structuresStore.error);
