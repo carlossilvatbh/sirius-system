@@ -18,8 +18,10 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from estruturas_app import views
 
 urlpatterns = [
+    path('', views.canvas_modern, name='home'),  # Página principal com interface moderna
     path('admin/', admin.site.urls),
     path('estruturas/', include('estruturas_app.urls')),
 ]
