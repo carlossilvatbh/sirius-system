@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
-from estruturas_app.models import Estrutura, RegraValidacao, Template, AlertaJurisdicao
+from estruturas_app.models import Estrutura
+from corporate.models import ValidationRule, JurisdictionAlert
 
 
 class Command(BaseCommand):
@@ -221,7 +222,7 @@ class Command(BaseCommand):
         ]
         
         for data in regras_data:
-            regra, created = RegraValidacao.objects.get_or_create(
+            regra, created = ValidationRule.objects.get_or_create(
                 estrutura_a=data['estrutura_a'],
                 estrutura_b=data['estrutura_b'],
                 tipo_relacionamento=data['tipo_relacionamento'],
@@ -272,7 +273,7 @@ class Command(BaseCommand):
         ]
         
         for data in alertas_data:
-            alerta, created = AlertaJurisdicao.objects.get_or_create(
+            alerta, created = JurisdictionAlert.objects.get_or_create(
                 titulo=data['titulo'],
                 jurisdicao=data['jurisdicao'],
                 defaults=data
@@ -345,12 +346,12 @@ class Command(BaseCommand):
             }
         ]
         
-        for data in templates_data:
-            template, created = Template.objects.get_or_create(
-                nome=data['nome'],
-                categoria=data['categoria'],
-                defaults=data
-            )
-            if created:
-                self.stdout.write(f'Created template: {template.nome}')
-
+        # Template model not yet implemented
+        # for data in templates_data:
+        #     template, created = Template.objects.get_or_create(
+        #         nome=data['nome'],
+        #         categoria=data['categoria'],
+        #         defaults=data
+        #     )
+        #     if created:
+        #         self.stdout.write(f'Created template: {template.nome}')

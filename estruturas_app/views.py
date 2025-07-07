@@ -3,7 +3,9 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 import json
-from .models import Estrutura, RegraValidacao, AlertaJurisdicao, Product, PersonalizedProduct
+from .models import Estrutura
+from corporate.models import ValidationRule, JurisdictionAlert
+from sales.models import Product, PersonalizedProduct
 from .cost_calculator import calculate_configuration_cost_django
 from .validation_engine import validate_configuration_django
 from .pdf_generator import generate_pdf_report
@@ -229,7 +231,7 @@ def api_validar_configuracao(request):
 def api_regras_validacao(request):
     """API endpoint to get validation rules."""
     try:
-        regras = RegraValidacao.objects.filter(ativa=True)
+        regras = ValidationRule.objects.filter(is_active=True)
         data = []
         
         for regra in regras:
@@ -253,7 +255,7 @@ def api_regras_validacao(request):
 def api_alertas_jurisdicao(request):
     """API endpoint to get jurisdiction alerts."""
     try:
-        alertas = AlertaJurisdicao.objects.filter(ativo=True)
+        alertas = JurisdictionAlert.objects.filter(is_active=True)
         data = []
         
         for alerta in alertas:
