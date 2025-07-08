@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 from pathlib import Path
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -38,9 +39,11 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
-    'estruturas_app',
+    'djmoney',
+
     'corporate',
     'sales',
+    'corporate_relationship',
 ]
 
 MIDDLEWARE = [
@@ -152,3 +155,14 @@ CORS_ALLOW_CREDENTIALS = True
 
 # Allow all origins during development
 CORS_ALLOW_ALL_ORIGINS = True
+
+# Django Money Configuration
+DEFAULT_CURRENCY = 'USD'
+CURRENCIES = ('USD', 'BRL', 'EUR')
+
+# Corporate Relationship Webhook Configuration
+RELATIONSHIP_WEBHOOK_URL = config('RELATIONSHIP_WEBHOOK_URL', default='http://localhost:8080/webhook')
+
+# FIXME: confirmar se precisamos de mais configurações de webhook
+WEBHOOK_TIMEOUT = config('WEBHOOK_TIMEOUT', default=10, cast=int)
+WEBHOOK_RETRIES = config('WEBHOOK_RETRIES', default=3, cast=int)

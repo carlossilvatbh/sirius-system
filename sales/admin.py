@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Product, ProductHierarchy, PersonalizedProduct, PersonalizedProductUBO
+from .models import Product, ProductHierarchy, PersonalizedProduct
 
 
 class ProductHierarchyInline(admin.TabularInline):
@@ -11,13 +11,15 @@ class ProductHierarchyInline(admin.TabularInline):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ['nome', 'commercial_name', 'complexidade_template', 'uso_count', 'ativo']
+    list_display = ['nome', 'commercial_name', 'complexidade_template',
+                    'uso_count', 'ativo']
     list_filter = ['complexidade_template', 'ativo', 'created_at']
     search_fields = ['nome', 'commercial_name', 'descricao']
     inlines = [ProductHierarchyInline]
     fieldsets = [
         ('Basic Information', {
-            'fields': ['nome', 'commercial_name', 'complexidade_template', 'descricao']
+            'fields': ['nome', 'commercial_name', 'complexidade_template',
+                       'descricao']
         }),
         ('Commercial Details', {
             'fields': ['master_agreement_url', 'publico_alvo', 'casos_uso']
@@ -43,18 +45,13 @@ class ProductHierarchyAdmin(admin.ModelAdmin):
     ordering = ['product', 'order']
 
 
-class PersonalizedProductUBOInline(admin.TabularInline):
-    model = PersonalizedProductUBO
-    extra = 1
-    fields = ['ubo', 'percentage']
-
-
 @admin.register(PersonalizedProduct)
 class PersonalizedProductAdmin(admin.ModelAdmin):
-    list_display = ['nome', 'get_base_type', 'status', 'version_number', 'get_total_percentage', 'ativo']
+    list_display = ['nome', 'get_base_type', 'status', 'version_number',
+                    'ativo']
     list_filter = ['status', 'version_number', 'ativo', 'created_at']
-    search_fields = ['nome', 'descricao', 'base_product__nome', 'base_structure__nome']
-    inlines = [PersonalizedProductUBOInline]
+    search_fields = ['nome', 'descricao', 'base_product__nome',
+                     'base_structure__nome']
     fieldsets = [
         ('Basic Information', {
             'fields': ['nome', 'descricao', 'status']
@@ -66,7 +63,8 @@ class PersonalizedProductAdmin(admin.ModelAdmin):
             'fields': ['version_number', 'parent_version']
         }),
         ('Customization', {
-            'fields': ['configuracao_personalizada', 'custo_personalizado', 'observacoes']
+            'fields': ['configuracao_personalizada', 'custo_personalizado',
+                       'observacoes']
         }),
         ('Status', {
             'fields': ['ativo']
@@ -79,9 +77,3 @@ class PersonalizedProductAdmin(admin.ModelAdmin):
     get_base_type.short_description = 'Base Type'
 
 
-@admin.register(PersonalizedProductUBO)
-class PersonalizedProductUBOAdmin(admin.ModelAdmin):
-    list_display = ['personalized_product', 'ubo', 'percentage']
-    list_filter = ['personalized_product', 'ubo', 'created_at']
-    search_fields = ['personalized_product__nome', 'ubo__nome']
-    ordering = ['personalized_product', '-percentage']

@@ -18,12 +18,12 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from estruturas_app import views
+from corporate import views
 
 urlpatterns = [
-    path('', views.canvas_modern, name='home'),  # Página principal com interface moderna
+    path('', views.canvas_modern, name='home'),  # Página principal
     path('admin/', admin.site.urls),
-    path('estruturas/', include('estruturas_app.urls')),
+    path('corporate/', include('corporate.urls')),
 ]
 
 # Serve static files during development

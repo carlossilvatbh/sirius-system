@@ -1,8 +1,8 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from estruturas_app.models import Estrutura, UBO as OldUBO, Product as OldProduct, PersonalizedProduct as OldPersonalizedProduct
-from corporate.models import Structure, UBO, TaxClassification
-from sales.models import Product, PersonalizedProduct, PersonalizedProductUBO
+# from estruturas_app.models import Estrutura, UBO as OldUBO, Product as OldProduct, PersonalizedProduct as OldPersonalizedProduct
+from corporate.models import Structure, UBO
+from sales.models import Product, PersonalizedProduct
 
 
 class Command(BaseCommand):
