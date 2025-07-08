@@ -51,7 +51,22 @@ class Structure(models.Model):
     Model representing legal structures available in the SIRIUS system.
     Each structure contains detailed information about costs, tax implications,
     privacy impacts, and operational requirements.
+    
+    This model combines the comprehensive features from Legal Structures (Estrutura)
+    with enhanced corporate features for a complete solution.
     """
+    
+    TIPOS_ESTRUTURA = [
+        ('TRUST', 'Trust'),
+        ('FOREIGN_TRUST', 'Foreign Trust'),
+        ('FUND', 'Fund'),
+        ('IBC', 'International Business Company'),
+        ('LLC_DISREGARDED', 'LLC Disregarded Entity'),
+        ('LLC_PARTNERSHIP', 'LLC Partnership'),
+        ('LLC_AS_CORP', 'LLC as a Corp'),
+        ('CORP', 'Corp'),
+        ('WYOMING_FOUNDATION', 'Wyoming Statutory Foundation'),
+    ]
     
     JURISDICOES = [
         ('US', 'United States'),
@@ -91,6 +106,12 @@ class Structure(models.Model):
     
     # Basic Information
     nome = models.CharField(max_length=100, help_text="Structure name")
+    tipo = models.CharField(
+        max_length=50, 
+        choices=TIPOS_ESTRUTURA, 
+        help_text="Structure type",
+        default='CORP'
+    )
     tax_classifications = models.ManyToManyField(
         TaxClassification,
         blank=True,
@@ -132,68 +153,183 @@ class Structure(models.Model):
         help_text="Annual maintenance cost in USD"
     )
     
-    # Privacy and Compliance
+    # Implementation Details
+    tempo_implementacao = models.IntegerField(
+        help_text="Implementation time in days",
+        validators=[MinValueValidator(1), MaxValueValidator(365)],
+        default=30
+    )
+    complexidade = models.IntegerField(
+        choices=[(i, f"Level {i}") for i in range(1, 6)],
+        help_text="Complexity level from 1 (simple) to 5 (very complex)",
+        default=3
+    )
+    
+    # Tax Impact Information
+    impacto_tributario_eua = models.TextField(
+        help_text="Detailed tax implications in the United States",
+        default="To be determined"
+    )
+    impacto_tributario_brasil = models.TextField(
+        help_text="Detailed tax implications in Brazil",
+        default="To be determined"
+    )
+    impacto_tributario_outros = models.TextField(
+        blank=True,
+        help_text="Tax implications in other jurisdictions"
+    )
+    
+    # Privacy and Asset Protection
+    nivel_confidencialidade = models.IntegerField(
+        choices=[(i, f"Level {i}") for i in range(1, 6)],
+        help_text="Confidentiality level from 1 (low) to 5 (very high)",
+        default=3
+    )
+    protecao_patrimonial = models.IntegerField(
+        choices=[(i, f"Level {i}") for i in range(1, 6)],
+        help_text="Asset protection level from 1 (low) to 5 (very high)",
+        default=3
+    )
+    impacto_privacidade = models.TextField(
+        help_text="Detailed privacy implications and protections",
+        default="Standard privacy protections apply"
+    )
+    
+    # Enhanced Privacy and Compliance Scores
     privacidade_score = models.IntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(100)],
-        help_text="Privacy score from 0 to 100"
+        help_text="Privacy score from 0 to 100 (calculated from nivel_confidencialidade)",
+        blank=True,
+        null=True
     )
     compliance_score = models.IntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(100)],
-        help_text="Compliance score from 0 to 100"
+        help_text="Compliance score from 0 to 100",
+        blank=True,
+        null=True
     )
     
-    # Implementation Details
-    tempo_implementacao = models.IntegerField(
-        help_text="Implementation time in business days"
+    # Operational Information
+    facilidade_banking = models.IntegerField(
+        choices=[(i, f"Level {i}") for i in range(1, 6)],
+        help_text="Banking facility level from 1 (difficult) to 5 (very easy)",
+        default=3
+    )
+    documentacao_necessaria = models.TextField(
+        help_text="Required documentation for setup",
+        default="Standard documentation required"
     )
     documentos_necessarios = models.TextField(
         blank=True,
-        help_text="Required documents for setup"
+        help_text="Additional required documents for setup (legacy field)"
     )
     
-    # Metadata
-    ativo = models.BooleanField(default=True)
+    # Document URLs
+    url_documentos = models.URLField(
+        blank=True,
+        help_text="URL for structure documents and templates"
+    )
+    
+    # Compliance and Reporting
+    formularios_obrigatorios_eua = models.TextField(
+        blank=True,
+        help_text="Required US forms and reporting obligations"
+    )
+    formularios_obrigatorios_brasil = models.TextField(
+        blank=True,
+        help_text="Required Brazilian forms and reporting obligations"
+    )
+    
+    # Status and Metadata
+    ativo = models.BooleanField(default=True, help_text="Whether structure is active")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        verbose_name = "Structure"
-        verbose_name_plural = "Structures"
+        verbose_name = "Legal Structure"
+        verbose_name_plural = "Legal Structures"
         ordering = ['nome']
         indexes = [
             models.Index(fields=['jurisdicao']),
             models.Index(fields=['ativo']),
+            models.Index(fields=['tipo']),
+            models.Index(fields=['complexidade']),
         ]
     
     def __str__(self):
-        return f"{self.nome} ({self.get_jurisdicao_display()})"
+        return f"{self.nome} ({self.get_tipo_display()})"
+    
+    def save(self, *args, **kwargs):
+        """Auto-calculate privacy score from nivel_confidencialidade if not set"""
+        if self.nivel_confidencialidade and not self.privacidade_score:
+            self.privacidade_score = self.nivel_confidencialidade * 20  # Convert 1-5 to 0-100
+        super().save(*args, **kwargs)
     
     def clean(self):
-        """Validações customizadas"""
+        """Validate jurisdiction and state combinations"""
         super().clean()
         
-        # Validar estado baseado na jurisdição
-        if self.jurisdicao == 'US' and not self.estado_us:
-            raise ValidationError(
-                "US State is required for United States jurisdiction"
-            )
-        elif self.jurisdicao == 'BR' and not self.estado_br:
-            raise ValidationError(
-                "Brazilian State is required for Brazil jurisdiction"
-            )
-        elif self.jurisdicao not in ['US', 'BR']:
-            if self.estado_us or self.estado_br:
-                raise ValidationError(
-                    "State selection is only valid for US or Brazil jurisdiction"
-                )
+        # Validate US state is only set when jurisdiction is US
+        if self.estado_us and self.jurisdicao != 'US':
+            raise ValidationError({
+                'estado_us': 'US State can only be set when jurisdiction is US'
+            })
+        
+        # Validate BR state is only set when jurisdiction is BR
+        if self.estado_br and self.jurisdicao != 'BR':
+            raise ValidationError({
+                'estado_br': 'Brazilian State can only be set when jurisdiction is Brazil'
+            })
+        
+        # Consolidate documentation fields
+        if self.documentos_necessarios and not self.documentacao_necessaria:
+            self.documentacao_necessaria = self.documentos_necessarios
     
     def get_custo_total_primeiro_ano(self):
-        """Calcula custo total do primeiro ano"""
+        """Calculate total first year cost including setup and maintenance"""
         return self.custo_base + self.custo_manutencao
     
+    def get_complexity_display_text(self):
+        """Get human-readable complexity description"""
+        complexity_map = {
+            1: "Very Simple",
+            2: "Simple", 
+            3: "Moderate",
+            4: "Complex",
+            5: "Very Complex"
+        }
+        return complexity_map.get(self.complexidade, "Unknown")
+    
+    def get_full_jurisdiction_display(self):
+        """Get full jurisdiction including state if applicable"""
+        jurisdiction = self.get_jurisdicao_display()
+        
+        if self.jurisdicao == 'US' and self.estado_us:
+            state = dict(self.US_STATES).get(self.estado_us, self.estado_us)
+            return f"{state}, {jurisdiction}"
+        elif self.jurisdicao == 'BR' and self.estado_br:
+            state = dict(self.BR_STATES).get(self.estado_br, self.estado_br)
+            return f"{state}, {jurisdiction}"
+        
+        return jurisdiction
+    
     def get_tax_classifications_display(self):
-        """Retorna as classificações fiscais como string"""
+        """Return tax classifications as string"""
         return ", ".join([tc.get_name_display() for tc in self.tax_classifications.all()])
+    
+    def get_privacy_level_display(self):
+        """Get privacy level as percentage"""
+        if self.privacidade_score:
+            return f"{self.privacidade_score}%"
+        elif self.nivel_confidencialidade:
+            return f"{self.nivel_confidencialidade * 20}%"
+        return "Not set"
+    
+    def get_compliance_level_display(self):
+        """Get compliance level as percentage"""
+        if self.compliance_score:
+            return f"{self.compliance_score}%"
+        return "Not set"
 
 
 class UBO(models.Model):

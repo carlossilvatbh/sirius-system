@@ -2,7 +2,14 @@ from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from datetime import date
-from .models import UBO, Successor, Product, PersonalizedProduct, PersonalizedProductUBO, Service, ServiceActivity, AlertaJurisdicao
+from corporate.models import (
+    UBO, Successor, JurisdictionAlert, Service, ServiceActivity
+)
+from sales.models import Product, PersonalizedProduct, PersonalizedProductUBO
+from .models import Estrutura  # Proxy model for backward compatibility
+
+# Legacy import alias for tests
+AlertaJurisdicao = JurisdictionAlert
 
 
 class UBOModelTest(TestCase):
@@ -13,6 +20,7 @@ class UBOModelTest(TestCase):
     def setUp(self):
         """Configuração inicial para os testes"""
         self.ubo_data = {
+            'nome': 'João Silva Santos',
             'nome_completo': 'João Silva Santos',
             'data_nascimento': date(1980, 1, 15),
             'nacionalidade': 'BR',
