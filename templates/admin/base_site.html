@@ -1,0 +1,56 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">
+    <a href="{% url 'dashboard:main' %}">
+        <i class="fas fa-tachometer-alt" style="margin-right: 10px; color: #79aec8;"></i>
+        SIRIUS Administration
+    </a>
+</h1>
+{% endblock %}
+
+{% block nav-global %}
+<div style="float: right; margin-top: 10px;">
+    <a href="{% url 'dashboard:main' %}" style="color: #ffc; text-decoration: none; margin-right: 20px;">
+        <i class="fas fa-tachometer-alt"></i> Dashboard
+    </a>
+    <a href="/admin/" style="color: #ffc; text-decoration: none; margin-right: 20px;">
+        <i class="fas fa-cogs"></i> Admin
+    </a>
+    {% if user.is_authenticated %}
+        <span style="color: #ffc; margin-right: 20px;">
+            <i class="fas fa-user"></i> {{ user.get_full_name|default:user.username }}
+        </span>
+        <a href="{% url 'admin:logout' %}" style="color: #ffc; text-decoration: none;">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        #site-name a {
+            color: #f5dd5d;
+            text-decoration: none;
+        }
+        #site-name a:hover {
+            color: #ffc;
+        }
+        .dashboard-nav {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 5px 15px;
+            border-radius: 20px;
+            margin-right: 10px;
+            transition: background 0.2s ease;
+        }
+        .dashboard-nav:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+{% endblock %}
+
