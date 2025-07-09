@@ -1,9 +1,5 @@
 from django.shortcuts import render
 
+# Views will be added as needed for future expansions
+# Currently, the system uses Django Admin interface only
 
-def canvas_modern(request):
-    """Modern canvas interface with enhanced UX/UI."""
-    context = {
-        'page_title': 'SIRIUS Canvas v2.0 - Modern Interface'
-    }
-    return render(request, 'canvas_modern.html', context)

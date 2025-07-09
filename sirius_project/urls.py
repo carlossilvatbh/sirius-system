@@ -15,17 +15,21 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
-from corporate import views
+from django.shortcuts import redirect
+
+def redirect_to_admin(request):
+    """Redirect root URL to Django Admin."""
+    return redirect('/admin/')
 
 urlpatterns = [
-    path('', views.canvas_modern, name='home'),  # Página principal
+    path('', redirect_to_admin, name='home'),
     path('admin/', admin.site.urls),
-    path('corporate/', include('corporate.urls')),
 ]
 
 # Serve static files during development
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+

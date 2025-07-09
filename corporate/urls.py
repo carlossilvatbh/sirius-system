@@ -1,8 +1,7 @@
 from django.urls import path
-from . import views
 
 app_name = 'corporate'
 
-urlpatterns = [
-    path('', views.canvas_modern, name='canvas_modern'),
-]
+# URLs will be added as needed for future expansions
+urlpatterns = []
+
