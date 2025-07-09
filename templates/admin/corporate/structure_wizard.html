@@ -1,0 +1,416 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}
+    {% if is_editing %}
+        Edit Structure: {{ structure.name }}
+    {% else %}
+        Create New Structure
+    {% endif %}
+{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <link rel="stylesheet" type="text/css" href="{% static 'admin/css/structure_wizard.css' %}">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="structure-wizard-container">
+    <!-- Wizard Header -->
+    <div class="wizard-header">
+        <h1 class="wizard-title">
+            {% if is_editing %}
+                <span class="icon">✏️</span> Edit Structure: {{ structure.name }}
+            {% else %}
+                <span class="icon">🏗️</span> Create New Structure
+            {% endif %}
+        </h1>
+        
+        <!-- Progress Steps -->
+        <div class="wizard-steps">
+            {% for step in wizard_steps %}
+                <div class="step" data-step="{{ step.id }}" id="step-{{ step.id }}">
+                    <div class="step-icon">{{ step.icon }}</div>
+                    <div class="step-label">{{ step.name }}</div>
+                    <div class="step-number">{{ step.id }}</div>
+                </div>
+                {% if not forloop.last %}
+                    <div class="step-connector"></div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Wizard Content -->
+    <div class="wizard-content">
+        <!-- Step 1: Basic Information -->
+        <div class="step-content" id="step-content-1">
+            <div class="step-header">
+                <h2>📋 Basic Information</h2>
+                <p>Enter the fundamental details for your structure</p>
+            </div>
+            
+            <div class="form-section">
+                <div class="form-group">
+                    <label for="structure-name">Structure Name *</label>
+                    <input type="text" id="structure-name" name="name" 
+                           value="{{ structure.name|default:'' }}" 
+                           placeholder="Enter structure name..." required>
+                    <div class="field-help">Choose a descriptive name for your corporate structure</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="structure-description">Description</label>
+                    <textarea id="structure-description" name="description" 
+                              placeholder="Describe the purpose and goals of this structure...">{{ structure.description|default:'' }}</textarea>
+                    <div class="field-help">Provide details about the structure's purpose and objectives</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="structure-status">Status</label>
+                    <select id="structure-status" name="status">
+                        <option value="drafting" {% if not structure or structure.status == 'drafting' %}selected{% endif %}>
+                            📝 Drafting
+                        </option>
+                        <option value="sent_for_approval" {% if structure.status == 'sent_for_approval' %}selected{% endif %}>
+                            📤 Sent for Approval
+                        </option>
+                        <option value="approved" {% if structure.status == 'approved' %}selected{% endif %}>
+                            ✅ Approved
+                        </option>
+                        <option value="rejected" {% if structure.status == 'rejected' %}selected{% endif %}>
+                            ❌ Rejected
+                        </option>
+                    </select>
+                    <div class="field-help">Current status of the structure</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Entities & UBOs -->
+        <div class="step-content" id="step-content-2" style="display: none;">
+            <div class="step-header">
+                <h2>🏢 Entities & UBOs</h2>
+                <p>Select the entities and Ultimate Beneficial Owners for your structure</p>
+            </div>
+            
+            <div class="selection-container">
+                <!-- Entities Selection -->
+                <div class="selection-section">
+                    <h3>🏢 Available Entities</h3>
+                    <div class="search-box">
+                        <input type="text" id="entity-search" placeholder="Search entities...">
+                    </div>
+                    <div class="items-list" id="entities-list">
+                        {% for entity in entities %}
+                            <div class="item-card entity-card" data-id="{{ entity.id }}">
+                                <div class="item-header">
+                                    <span class="item-name">{{ entity.name }}</span>
+                                    <span class="item-type">{{ entity.entity_type }}</span>
+                                </div>
+                                <div class="item-details">
+                                    <span class="jurisdiction">📍 {{ entity.jurisdiction }}</span>
+                                    {% if entity.total_shares %}
+                                        <span class="shares">📊 {{ entity.total_shares|floatformat:0 }} shares</span>
+                                    {% endif %}
+                                </div>
+                                <div class="item-actions">
+                                    <button type="button" class="btn-select" onclick="selectEntity({{ entity.id }})">
+                                        Select
+                                    </button>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <!-- UBOs Selection -->
+                <div class="selection-section">
+                    <h3>👤 Available UBOs</h3>
+                    <div class="search-box">
+                        <input type="text" id="ubo-search" placeholder="Search UBOs...">
+                    </div>
+                    <div class="items-list" id="ubos-list">
+                        {% for party in parties %}
+                            <div class="item-card ubo-card" data-id="{{ party.id }}">
+                                <div class="item-header">
+                                    <span class="item-name">{{ party.name }}</span>
+                                    <span class="item-type">UBO</span>
+                                </div>
+                                <div class="item-details">
+                                    {% if party.nationality %}
+                                        <span class="nationality">🌍 {{ party.nationality }}</span>
+                                    {% endif %}
+                                    {% if party.date_of_birth %}
+                                        <span class="age">📅 {{ party.date_of_birth|date:"Y" }}</span>
+                                    {% endif %}
+                                </div>
+                                <div class="item-actions">
+                                    <button type="button" class="btn-select" onclick="selectUBO({{ party.id }})">
+                                        Select
+                                    </button>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Selected Items -->
+            <div class="selected-items">
+                <h3>✅ Selected Items</h3>
+                <div class="selected-container">
+                    <div class="selected-section">
+                        <h4>🏢 Selected Entities</h4>
+                        <div id="selected-entities" class="selected-list"></div>
+                    </div>
+                    <div class="selected-section">
+                        <h4>👤 Selected UBOs</h4>
+                        <div id="selected-ubos" class="selected-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Ownership Builder -->
+        <div class="step-content" id="step-content-3" style="display: none;">
+            <div class="step-header">
+                <h2>🔗 Ownership Builder</h2>
+                <p>Define ownership relationships between entities and UBOs</p>
+            </div>
+            
+            <div class="ownership-builder">
+                <!-- Ownership Matrix -->
+                <div class="ownership-matrix">
+                    <div class="matrix-header">
+                        <h3>Ownership Matrix</h3>
+                        <div class="matrix-actions">
+                            <button type="button" class="btn-add-ownership" onclick="addOwnership()">
+                                ➕ Add Ownership
+                            </button>
+                            <button type="button" class="btn-auto-balance" onclick="autoBalance()">
+                                ⚖️ Auto Balance
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="matrix-table-container">
+                        <table class="ownership-table" id="ownership-table">
+                            <thead>
+                                <tr>
+                                    <th>Owner</th>
+                                    <th>Owned Entity</th>
+                                    <th>Percentage</th>
+                                    <th>Shares</th>
+                                    <th>Corporate Name</th>
+                                    <th>Hash Number</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ownership-tbody">
+                                <!-- Ownership rows will be added here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Ownership Summary -->
+                <div class="ownership-summary">
+                    <h3>📊 Ownership Summary</h3>
+                    <div id="ownership-summary-content">
+                        <!-- Summary will be generated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 4: Validation & Preview -->
+        <div class="step-content" id="step-content-4" style="display: none;">
+            <div class="step-header">
+                <h2>✅ Validation & Preview</h2>
+                <p>Review and validate your structure before saving</p>
+            </div>
+            
+            <div class="validation-container">
+                <!-- Validation Results -->
+                <div class="validation-section">
+                    <h3>🔍 Validation Results</h3>
+                    <div id="validation-results">
+                        <div class="validation-loading">
+                            <div class="spinner"></div>
+                            <span>Running validation...</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Structure Preview -->
+                <div class="preview-section">
+                    <h3>👁️ Structure Preview</h3>
+                    <div id="structure-preview">
+                        <!-- Preview will be generated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 5: Save & Generate -->
+        <div class="step-content" id="step-content-5" style="display: none;">
+            <div class="step-header">
+                <h2>💾 Save & Generate</h2>
+                <p>Finalize your structure and generate documentation</p>
+            </div>
+            
+            <div class="save-container">
+                <!-- Save Options -->
+                <div class="save-options">
+                    <h3>💾 Save Options</h3>
+                    <div class="option-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="approve-structure">
+                            <span class="checkmark"></span>
+                            Approve structure immediately
+                        </label>
+                        <div class="option-help">
+                            Check this to set the structure status to "Approved"
+                        </div>
+                    </div>
+                    
+                    <div class="option-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="generate-docs" checked>
+                            <span class="checkmark"></span>
+                            Generate documentation
+                        </label>
+                        <div class="option-help">
+                            Generate comprehensive documentation for this structure
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Final Summary -->
+                <div class="final-summary">
+                    <h3>📋 Final Summary</h3>
+                    <div id="final-summary-content">
+                        <!-- Summary will be generated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Wizard Navigation -->
+    <div class="wizard-navigation">
+        <button type="button" class="btn-nav btn-previous" onclick="previousStep()" style="display: none;">
+            ⬅️ Previous
+        </button>
+        
+        <div class="nav-center">
+            <span class="step-indicator">Step <span id="current-step">1</span> of {{ wizard_steps|length }}</span>
+        </div>
+        
+        <button type="button" class="btn-nav btn-next" onclick="nextStep()">
+            Next ➡️
+        </button>
+        
+        <button type="button" class="btn-nav btn-save" onclick="saveStructure()" style="display: none;">
+            💾 Save Structure
+        </button>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loading-overlay" style="display: none;">
+    <div class="loading-content">
+        <div class="spinner"></div>
+        <div class="loading-text">Processing...</div>
+    </div>
+</div>
+
+<!-- Modals -->
+<div class="modal" id="ownership-modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add Ownership Relationship</h3>
+            <button type="button" class="modal-close" onclick="closeOwnershipModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <form id="ownership-form">
+                <div class="form-group">
+                    <label for="modal-owner">Owner</label>
+                    <select id="modal-owner" name="owner" required>
+                        <option value="">Select owner...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="modal-owned-entity">Owned Entity</label>
+                    <select id="modal-owned-entity" name="owned_entity" required>
+                        <option value="">Select entity...</option>
+                    </select>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="modal-percentage">Percentage</label>
+                        <input type="number" id="modal-percentage" name="percentage" 
+                               min="0" max="100" step="0.01" placeholder="0.00">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="modal-shares">Shares</label>
+                        <input type="number" id="modal-shares" name="shares" 
+                               min="0" step="1" placeholder="0">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="modal-corporate-name">Corporate Name</label>
+                    <input type="text" id="modal-corporate-name" name="corporate_name" 
+                           placeholder="Corporate name for this ownership">
+                </div>
+                
+                <div class="form-group">
+                    <label for="modal-hash-number">Hash Number</label>
+                    <input type="text" id="modal-hash-number" name="hash_number" 
+                           placeholder="Hash number for identification">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="modal-share-value-usd">Share Value (USD)</label>
+                        <input type="number" id="modal-share-value-usd" name="share_value_usd" 
+                               min="0" step="0.01" placeholder="0.00">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="modal-share-value-eur">Share Value (EUR)</label>
+                        <input type="number" id="modal-share-value-eur" name="share_value_eur" 
+                               min="0" step="0.01" placeholder="0.00">
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn-cancel" onclick="closeOwnershipModal()">Cancel</button>
+            <button type="button" class="btn-save" onclick="saveOwnership()">Save Ownership</button>
+        </div>
+    </div>
+</div>
+
+<script src="{% static 'admin/js/structure_wizard.js' %}"></script>
+
+<script>
+    // Initialize wizard with data
+    window.wizardData = {
+        structureId: {{ structure.id|default:'null' }},
+        isEditing: {{ is_editing|yesno:'true,false' }},
+        entities: {{ entities|safe }},
+        parties: {{ parties|safe }},
+        ownerships: {{ ownerships|safe }},
+        csrfToken: '{{ csrf_token }}'
+    };
+</script>
+
+{% endblock %}
+

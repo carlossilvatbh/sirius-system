@@ -1,0 +1,776 @@
+{% load static %}
+
+<!-- Ownership Matrix Visual Component -->
+<div class="ownership-matrix-container">
+    <!-- Matrix Header -->
+    <div class="matrix-header">
+        <h3 class="matrix-title">
+            <span class="icon">🔗</span>
+            Ownership Matrix
+        </h3>
+        <div class="matrix-actions">
+            <button type="button" class="matrix-btn" onclick="addOwnershipRelation()">
+                ➕ Add Ownership
+            </button>
+            <button type="button" class="matrix-btn secondary" onclick="autoBalanceOwnership()">
+                ⚖️ Auto Balance
+            </button>
+            <button type="button" class="matrix-btn" onclick="validateOwnership()">
+                ✅ Validate
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="ownership-summary-cards">
+        <div class="summary-card" id="total-entities-card">
+            <div class="card-header">
+                <span class="card-icon">🏢</span>
+            </div>
+            <div class="card-value" id="total-entities-value">0</div>
+            <div class="card-label">Total Entities</div>
+        </div>
+        
+        <div class="summary-card" id="complete-entities-card">
+            <div class="card-header">
+                <span class="card-icon">✅</span>
+            </div>
+            <div class="card-value complete" id="complete-entities-value">0</div>
+            <div class="card-label">Complete (100%)</div>
+        </div>
+        
+        <div class="summary-card" id="incomplete-entities-card">
+            <div class="card-header">
+                <span class="card-icon">⚠️</span>
+            </div>
+            <div class="card-value incomplete" id="incomplete-entities-value">0</div>
+            <div class="card-label">Incomplete (&lt;100%)</div>
+        </div>
+        
+        <div class="summary-card" id="over-entities-card">
+            <div class="card-header">
+                <span class="card-icon">❌</span>
+            </div>
+            <div class="card-value over" id="over-entities-value">0</div>
+            <div class="card-label">Over-owned (&gt;100%)</div>
+        </div>
+    </div>
+
+    <!-- Visual Matrix -->
+    <div class="ownership-visual-matrix" id="visual-matrix">
+        <!-- Entity groups will be dynamically generated here -->
+    </div>
+
+    <!-- Interactive Table -->
+    <div class="ownership-interactive-table">
+        <div class="table-header">
+            <div>Owner</div>
+            <div>Owned Entity</div>
+            <div>Percentage</div>
+            <div>Shares</div>
+            <div>Corporate Name</div>
+            <div>Hash Number</div>
+            <div>Actions</div>
+        </div>
+        
+        <div id="ownership-table-body">
+            <!-- Table rows will be dynamically generated here -->
+        </div>
+    </div>
+
+    <!-- Empty State -->
+    <div class="empty-state" id="ownership-empty-state" style="display: none;">
+        <div class="drop-zone" onclick="addOwnershipRelation()">
+            <div class="drop-zone-icon">🔗</div>
+            <div class="drop-zone-text">Click to add your first ownership relationship</div>
+        </div>
+    </div>
+</div>
+
+<!-- Ownership Modal -->
+<div class="modal" id="ownership-relation-modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add Ownership Relationship</h3>
+            <button type="button" class="modal-close" onclick="closeOwnershipModal()">×</button>
+        </div>
+        
+        <div class="modal-body">
+            <form id="ownership-relation-form">
+                <!-- Owner Selection -->
+                <div class="form-section">
+                    <h4>👤 Select Owner</h4>
+                    <div class="form-group">
+                        <label for="owner-type">Owner Type</label>
+                        <select id="owner-type" name="owner_type" onchange="updateOwnerOptions()">
+                            <option value="">Select type...</option>
+                            <option value="ubo">👤 Ultimate Beneficial Owner (UBO)</option>
+                            <option value="entity">🏢 Corporate Entity</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="owner-id">Owner</label>
+                        <select id="owner-id" name="owner_id" disabled>
+                            <option value="">Select owner...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Owned Entity Selection -->
+                <div class="form-section">
+                    <h4>🏢 Select Owned Entity</h4>
+                    <div class="form-group">
+                        <label for="owned-entity-id">Owned Entity</label>
+                        <select id="owned-entity-id" name="owned_entity_id">
+                            <option value="">Select entity...</option>
+                            {% for entity in entities %}
+                                <option value="{{ entity.id }}">🏢 {{ entity.name }} ({{ entity.entity_type }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Ownership Details -->
+                <div class="form-section">
+                    <h4>📊 Ownership Details</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="ownership-percentage">Percentage *</label>
+                            <input type="number" id="ownership-percentage" name="percentage" 
+                                   min="0" max="100" step="0.01" placeholder="0.00"
+                                   onchange="calculateShares()">
+                            <div class="field-help">Ownership percentage (0-100%)</div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="ownership-shares">Shares</label>
+                            <input type="number" id="ownership-shares" name="shares" 
+                                   min="0" step="1" placeholder="0"
+                                   onchange="calculatePercentage()">
+                            <div class="field-help">Number of shares owned</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="corporate-name">Corporate Name</label>
+                        <input type="text" id="corporate-name" name="corporate_name" 
+                               placeholder="Corporate name for this ownership">
+                        <div class="field-help">Legal corporate name for this ownership relationship</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="hash-number">Hash Number</label>
+                        <input type="text" id="hash-number" name="hash_number" 
+                               placeholder="Hash number for identification">
+                        <div class="field-help">Unique hash number for this ownership</div>
+                    </div>
+                </div>
+
+                <!-- Share Values -->
+                <div class="form-section">
+                    <h4>💰 Share Values</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="share-value-usd">Share Value (USD)</label>
+                            <input type="number" id="share-value-usd" name="share_value_usd" 
+                                   min="0" step="0.01" placeholder="0.00">
+                            <div class="field-help">Value per share in USD</div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="share-value-eur">Share Value (EUR)</label>
+                            <input type="number" id="share-value-eur" name="share_value_eur" 
+                                   min="0" step="0.01" placeholder="0.00">
+                            <div class="field-help">Value per share in EUR</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Calculated Values -->
+                    <div class="calculated-values" id="calculated-values" style="display: none;">
+                        <h5>📈 Calculated Values</h5>
+                        <div class="calc-row">
+                            <span class="calc-label">Total Value (USD):</span>
+                            <span class="calc-value" id="total-value-usd">$0.00</span>
+                        </div>
+                        <div class="calc-row">
+                            <span class="calc-label">Total Value (EUR):</span>
+                            <span class="calc-value" id="total-value-eur">€0.00</span>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        <div class="modal-footer">
+            <button type="button" class="btn-cancel" onclick="closeOwnershipModal()">Cancel</button>
+            <button type="button" class="btn-save" onclick="saveOwnershipRelation()">Save Ownership</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Ownership Matrix JavaScript Functions
+(function() {
+    'use strict';
+
+    // Global state for ownership matrix
+    window.OwnershipMatrix = {
+        ownerships: [],
+        entities: [],
+        ubos: [],
+        editingIndex: -1
+    };
+
+    // Initialize ownership matrix
+    function initializeOwnershipMatrix() {
+        loadOwnershipData();
+        renderMatrix();
+        updateSummaryCards();
+    }
+
+    // Load ownership data from wizard state
+    function loadOwnershipData() {
+        if (window.StructureWizard) {
+            OwnershipMatrix.ownerships = window.StructureWizard.ownerships || [];
+        }
+        
+        if (window.wizardData) {
+            OwnershipMatrix.entities = window.wizardData.entities || [];
+            OwnershipMatrix.ubos = window.wizardData.parties || [];
+        }
+    }
+
+    // Render the complete matrix
+    function renderMatrix() {
+        renderVisualMatrix();
+        renderInteractiveTable();
+        updateEmptyState();
+    }
+
+    // Render visual matrix with bars
+    function renderVisualMatrix() {
+        const $container = $('#visual-matrix');
+        $container.empty();
+
+        // Group ownerships by entity
+        const entityGroups = {};
+        
+        OwnershipMatrix.ownerships.forEach(ownership => {
+            const entityId = ownership.owned_entity_id;
+            if (!entityGroups[entityId]) {
+                entityGroups[entityId] = {
+                    entity: findEntityById(entityId),
+                    ownerships: [],
+                    totalPercentage: 0
+                };
+            }
+            entityGroups[entityId].ownerships.push(ownership);
+            entityGroups[entityId].totalPercentage += ownership.percentage || 0;
+        });
+
+        // Render each entity group
+        Object.keys(entityGroups).forEach(entityId => {
+            const group = entityGroups[entityId];
+            if (!group.entity) return;
+
+            const completionClass = getCompletionClass(group.totalPercentage);
+            const completionBadge = getCompletionBadge(group.totalPercentage);
+
+            const $entityGroup = $(`
+                <div class="matrix-entity-group ${completionClass}" data-entity-id="${entityId}">
+                    <div class="entity-header">
+                        <div class="entity-name">
+                            🏢 ${group.entity.name}
+                            <span class="entity-type">${group.entity.entity_type}</span>
+                        </div>
+                        <div class="entity-completion">
+                            ${completionBadge}
+                            <span class="completion-percentage">${group.totalPercentage.toFixed(1)}%</span>
+                        </div>
+                    </div>
+                    <div class="ownership-bars">
+                        ${renderOwnershipBars(group.ownerships)}
+                        ${renderTotalBar(group.totalPercentage)}
+                    </div>
+                </div>
+            `);
+
+            $container.append($entityGroup);
+        });
+
+        // Add animation
+        $('.matrix-entity-group').addClass('fade-in-up');
+    }
+
+    // Render ownership bars for an entity
+    function renderOwnershipBars(ownerships) {
+        return ownerships.map(ownership => {
+            const ownerName = ownership.owner_ubo_name || ownership.owner_entity_name || 'Unknown';
+            const ownerIcon = ownership.owner_ubo_name ? '👤' : '🏢';
+            const ownerType = ownership.owner_ubo_name ? 'ubo' : 'entity';
+            const percentage = ownership.percentage || 0;
+            const fillClass = percentage > 100 ? 'over' : ownerType;
+
+            return `
+                <div class="ownership-bar">
+                    <div class="owner-info">
+                        <span class="owner-icon">${ownerIcon}</span>
+                        <span class="owner-name">${ownerName}</span>
+                    </div>
+                    <div class="percentage-bar">
+                        <div class="percentage-fill ${fillClass}" style="width: ${Math.min(percentage, 100)}%">
+                            <div class="percentage-text">${percentage.toFixed(1)}%</div>
+                        </div>
+                    </div>
+                    <div class="percentage-value">${percentage.toFixed(1)}%</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // Render total bar for an entity
+    function renderTotalBar(totalPercentage) {
+        const completionClass = getCompletionClass(totalPercentage);
+        const width = Math.min(totalPercentage, 100);
+
+        return `
+            <div class="total-bar ${completionClass}">
+                <div class="owner-info">
+                    <span class="owner-icon">📊</span>
+                    <span class="owner-name">Total Ownership</span>
+                </div>
+                <div class="percentage-bar">
+                    <div class="percentage-fill" style="width: ${width}%">
+                        <div class="percentage-text">${totalPercentage.toFixed(1)}%</div>
+                    </div>
+                </div>
+                <div class="percentage-value">${totalPercentage.toFixed(1)}%</div>
+            </div>
+        `;
+    }
+
+    // Render interactive table
+    function renderInteractiveTable() {
+        const $tbody = $('#ownership-table-body');
+        $tbody.empty();
+
+        if (OwnershipMatrix.ownerships.length === 0) {
+            return;
+        }
+
+        OwnershipMatrix.ownerships.forEach((ownership, index) => {
+            const ownerName = ownership.owner_ubo_name || ownership.owner_entity_name || 'Unknown';
+            const ownerIcon = ownership.owner_ubo_name ? '👤' : '🏢';
+            const entityName = ownership.owned_entity_name || 'Unknown';
+            const percentage = ownership.percentage || 0;
+            const percentageClass = getPercentageClass(percentage);
+
+            const $row = $(`
+                <div class="table-row" data-index="${index}">
+                    <div class="table-cell owner" data-label="Owner">
+                        ${ownerIcon} ${ownerName}
+                    </div>
+                    <div class="table-cell entity" data-label="Owned Entity">
+                        🏢 ${entityName}
+                    </div>
+                    <div class="table-cell percentage ${percentageClass}" data-label="Percentage">
+                        ${percentage.toFixed(1)}%
+                    </div>
+                    <div class="table-cell" data-label="Shares">
+                        ${ownership.shares || '-'}
+                    </div>
+                    <div class="table-cell" data-label="Corporate Name">
+                        ${ownership.corporate_name || '-'}
+                    </div>
+                    <div class="table-cell" data-label="Hash Number">
+                        ${ownership.hash_number || '-'}
+                    </div>
+                    <div class="table-cell" data-label="Actions">
+                        <button type="button" class="action-btn edit" onclick="editOwnership(${index})" title="Edit">
+                            ✏️
+                        </button>
+                        <button type="button" class="action-btn" onclick="removeOwnership(${index})" title="Remove">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+            `);
+
+            $tbody.append($row);
+        });
+    }
+
+    // Update summary cards
+    function updateSummaryCards() {
+        const stats = calculateOwnershipStats();
+        
+        $('#total-entities-value').text(stats.totalEntities);
+        $('#complete-entities-value').text(stats.completeEntities);
+        $('#incomplete-entities-value').text(stats.incompleteEntities);
+        $('#over-entities-value').text(stats.overEntities);
+
+        // Update card classes
+        updateCardClass('#complete-entities-card', stats.completeEntities > 0 ? 'complete' : '');
+        updateCardClass('#incomplete-entities-card', stats.incompleteEntities > 0 ? 'incomplete' : '');
+        updateCardClass('#over-entities-card', stats.overEntities > 0 ? 'over' : '');
+    }
+
+    // Calculate ownership statistics
+    function calculateOwnershipStats() {
+        const entityTotals = {};
+        
+        // Calculate totals per entity
+        OwnershipMatrix.ownerships.forEach(ownership => {
+            const entityId = ownership.owned_entity_id;
+            if (!entityTotals[entityId]) {
+                entityTotals[entityId] = 0;
+            }
+            entityTotals[entityId] += ownership.percentage || 0;
+        });
+
+        const totalEntities = Object.keys(entityTotals).length;
+        let completeEntities = 0;
+        let incompleteEntities = 0;
+        let overEntities = 0;
+
+        Object.values(entityTotals).forEach(total => {
+            if (total === 100) {
+                completeEntities++;
+            } else if (total < 100) {
+                incompleteEntities++;
+            } else {
+                overEntities++;
+            }
+        });
+
+        return {
+            totalEntities,
+            completeEntities,
+            incompleteEntities,
+            overEntities
+        };
+    }
+
+    // Update empty state visibility
+    function updateEmptyState() {
+        const $emptyState = $('#ownership-empty-state');
+        const $matrix = $('#visual-matrix');
+        const $table = $('.ownership-interactive-table');
+
+        if (OwnershipMatrix.ownerships.length === 0) {
+            $emptyState.show();
+            $matrix.hide();
+            $table.hide();
+        } else {
+            $emptyState.hide();
+            $matrix.show();
+            $table.show();
+        }
+    }
+
+    // Helper functions
+    function getCompletionClass(percentage) {
+        if (percentage === 100) return 'complete';
+        if (percentage > 100) return 'over';
+        return 'incomplete';
+    }
+
+    function getCompletionBadge(percentage) {
+        if (percentage === 100) {
+            return '<span class="completion-badge complete">✅ Complete</span>';
+        } else if (percentage > 100) {
+            return '<span class="completion-badge over">❌ Over-owned</span>';
+        } else {
+            return '<span class="completion-badge incomplete">⚠️ Incomplete</span>';
+        }
+    }
+
+    function getPercentageClass(percentage) {
+        if (percentage === 100) return 'complete';
+        if (percentage > 100) return 'error';
+        if (percentage > 0) return 'warning';
+        return '';
+    }
+
+    function updateCardClass(selector, className) {
+        const $card = $(selector);
+        $card.removeClass('complete incomplete over');
+        if (className) {
+            $card.addClass(className);
+        }
+    }
+
+    function findEntityById(entityId) {
+        return OwnershipMatrix.entities.find(entity => entity.id === parseInt(entityId));
+    }
+
+    function findUBOById(uboId) {
+        return OwnershipMatrix.ubos.find(ubo => ubo.id === parseInt(uboId));
+    }
+
+    // Global functions for button clicks
+    window.addOwnershipRelation = function() {
+        OwnershipMatrix.editingIndex = -1;
+        showOwnershipModal();
+    };
+
+    window.editOwnership = function(index) {
+        OwnershipMatrix.editingIndex = index;
+        const ownership = OwnershipMatrix.ownerships[index];
+        populateOwnershipForm(ownership);
+        showOwnershipModal();
+    };
+
+    window.removeOwnership = function(index) {
+        if (confirm('Are you sure you want to remove this ownership relationship?')) {
+            OwnershipMatrix.ownerships.splice(index, 1);
+            
+            // Update wizard state
+            if (window.StructureWizard) {
+                window.StructureWizard.ownerships = OwnershipMatrix.ownerships;
+            }
+            
+            renderMatrix();
+            updateSummaryCards();
+            showMatrixMessage('Ownership relationship removed', 'info');
+        }
+    };
+
+    window.autoBalanceOwnership = function() {
+        // Group by entity and auto-balance
+        const entityGroups = {};
+        
+        OwnershipMatrix.ownerships.forEach(ownership => {
+            const entityId = ownership.owned_entity_id;
+            if (!entityGroups[entityId]) {
+                entityGroups[entityId] = [];
+            }
+            entityGroups[entityId].push(ownership);
+        });
+
+        // Balance each group
+        Object.values(entityGroups).forEach(group => {
+            const equalPercentage = 100 / group.length;
+            group.forEach(ownership => {
+                ownership.percentage = parseFloat(equalPercentage.toFixed(2));
+            });
+        });
+
+        // Update wizard state
+        if (window.StructureWizard) {
+            window.StructureWizard.ownerships = OwnershipMatrix.ownerships;
+        }
+
+        renderMatrix();
+        updateSummaryCards();
+        showMatrixMessage('Ownership percentages auto-balanced', 'success');
+    };
+
+    window.validateOwnership = function() {
+        const validation = performOwnershipValidation();
+        displayValidationResults(validation);
+    };
+
+    function performOwnershipValidation() {
+        const errors = [];
+        const warnings = [];
+        const info = [];
+
+        // Check for entities without ownership
+        const entitiesWithOwnership = new Set();
+        OwnershipMatrix.ownerships.forEach(ownership => {
+            entitiesWithOwnership.add(ownership.owned_entity_id);
+        });
+
+        OwnershipMatrix.entities.forEach(entity => {
+            if (!entitiesWithOwnership.has(entity.id)) {
+                warnings.push(`Entity "${entity.name}" has no ownership defined`);
+            }
+        });
+
+        // Check ownership totals
+        const entityTotals = {};
+        OwnershipMatrix.ownerships.forEach(ownership => {
+            const entityId = ownership.owned_entity_id;
+            if (!entityTotals[entityId]) {
+                entityTotals[entityId] = { total: 0, entity: findEntityById(entityId) };
+            }
+            entityTotals[entityId].total += ownership.percentage || 0;
+        });
+
+        Object.values(entityTotals).forEach(({ total, entity }) => {
+            if (total > 100) {
+                errors.push(`Entity "${entity.name}" is over-owned (${total.toFixed(1)}%)`);
+            } else if (total < 100) {
+                warnings.push(`Entity "${entity.name}" is under-owned (${total.toFixed(1)}%)`);
+            } else {
+                info.push(`Entity "${entity.name}" has complete ownership (100%)`);
+            }
+        });
+
+        return { errors, warnings, info };
+    }
+
+    function displayValidationResults(validation) {
+        let message = '';
+        let type = 'success';
+
+        if (validation.errors.length > 0) {
+            message = `${validation.errors.length} error(s) found. Check ownership percentages.`;
+            type = 'error';
+        } else if (validation.warnings.length > 0) {
+            message = `${validation.warnings.length} warning(s) found. Some entities may need attention.`;
+            type = 'warning';
+        } else {
+            message = 'All ownership relationships are valid!';
+            type = 'success';
+        }
+
+        showMatrixMessage(message, type);
+    }
+
+    function showMatrixMessage(message, type) {
+        // Remove existing messages
+        $('.matrix-message').remove();
+        
+        const icons = {
+            'success': '✅',
+            'error': '❌',
+            'warning': '⚠️',
+            'info': 'ℹ️'
+        };
+        
+        const $message = $(`
+            <div class="matrix-message matrix-message-${type}">
+                <span class="message-icon">${icons[type]}</span>
+                <span class="message-text">${message}</span>
+                <button type="button" class="message-close" onclick="$(this).parent().remove()">×</button>
+            </div>
+        `);
+        
+        $('.ownership-matrix-container').prepend($message);
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            $message.fadeOut(300, function() {
+                $(this).remove();
+            });
+        }, 5000);
+    }
+
+    // Initialize when document is ready
+    $(document).ready(function() {
+        if ($('#visual-matrix').length > 0) {
+            initializeOwnershipMatrix();
+        }
+    });
+
+})();
+</script>
+
+<style>
+/* Additional styles for matrix messages */
+.matrix-message {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    font-weight: 500;
+    animation: slideDown 0.3s ease;
+}
+
+.matrix-message-success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.matrix-message-error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.matrix-message-warning {
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.matrix-message-info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+.message-close {
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    margin-left: auto;
+    opacity: 0.7;
+}
+
+.message-close:hover {
+    opacity: 1;
+}
+
+/* Form section styles */
+.form-section {
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.form-section:last-child {
+    border-bottom: none;
+}
+
+.form-section h4 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    margin: 0 0 15px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Calculated values styles */
+.calculated-values {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 15px;
+    margin-top: 15px;
+}
+
+.calculated-values h5 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin: 0 0 10px 0;
+}
+
+.calc-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.calc-label {
+    font-size: 13px;
+    color: #666;
+}
+
+.calc-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+}
+</style>
+
