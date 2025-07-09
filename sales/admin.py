@@ -1,79 +1,94 @@
 from django.contrib import admin
-from .models import Product, ProductHierarchy, PersonalizedProduct
+from .models import Partner, Contact, StructureRequest, StructureApproval
 
 
-class ProductHierarchyInline(admin.TabularInline):
-    model = ProductHierarchy
+class ContactInline(admin.TabularInline):
+    model = Contact
     extra = 1
-    fields = ['structure', 'order', 'custom_cost', 'notes']
-    ordering = ['order']
+    fields = ['name', 'role', 'phone', 'email']
 
 
-@admin.register(Product)
-class ProductAdmin(admin.ModelAdmin):
-    list_display = ['nome', 'commercial_name', 'complexidade_template',
-                    'uso_count', 'ativo']
-    list_filter = ['complexidade_template', 'ativo', 'created_at']
-    search_fields = ['nome', 'commercial_name', 'descricao']
-    inlines = [ProductHierarchyInline]
+@admin.register(Partner)
+class PartnerAdmin(admin.ModelAdmin):
+    list_display = ['company_name', 'partnership_status', 'partnership_start_date']
+    list_filter = ['partnership_status', 'partnership_start_date']
+    search_fields = ['company_name', 'party__name']
+    inlines = [ContactInline]
     fieldsets = [
         ('Basic Information', {
-            'fields': ['nome', 'commercial_name', 'complexidade_template',
-                       'descricao']
+            'fields': ['party', 'company_name', 'address']
         }),
-        ('Commercial Details', {
-            'fields': ['master_agreement_url', 'publico_alvo', 'casos_uso']
-        }),
-        ('Cost Configuration', {
-            'fields': ['custo_automatico', 'custo_manual']
-        }),
-        ('Implementation', {
-            'fields': ['tempo_total_implementacao']
-        }),
-        ('Status', {
-            'fields': ['ativo']
+        ('Partnership Details', {
+            'fields': ['partnership_status']
         }),
     ]
-    ordering = ['-uso_count', 'commercial_name']
+    ordering = ['company_name']
 
 
-@admin.register(ProductHierarchy)
-class ProductHierarchyAdmin(admin.ModelAdmin):
-    list_display = ['product', 'structure', 'order', 'custom_cost']
-    list_filter = ['product', 'structure', 'created_at']
-    search_fields = ['product__nome', 'structure__nome']
-    ordering = ['product', 'order']
-
-
-@admin.register(PersonalizedProduct)
-class PersonalizedProductAdmin(admin.ModelAdmin):
-    list_display = ['nome', 'get_base_type', 'status', 'version_number',
-                    'ativo']
-    list_filter = ['status', 'version_number', 'ativo', 'created_at']
-    search_fields = ['nome', 'descricao', 'base_product__nome',
-                     'base_structure__nome']
+@admin.register(Contact)
+class ContactAdmin(admin.ModelAdmin):
+    list_display = ['name', 'role', 'partner', 'email', 'phone']
+    list_filter = ['role', 'partner']
+    search_fields = ['name', 'email', 'partner__company_name']
     fieldsets = [
-        ('Basic Information', {
-            'fields': ['nome', 'descricao', 'status']
+        ('Contact Information', {
+            'fields': ['partner', 'name', 'role']
         }),
-        ('Base Configuration', {
-            'fields': ['base_product', 'base_structure']
-        }),
-        ('Versioning', {
-            'fields': ['version_number', 'parent_version']
-        }),
-        ('Customization', {
-            'fields': ['configuracao_personalizada', 'custo_personalizado',
-                       'observacoes']
-        }),
-        ('Status', {
-            'fields': ['ativo']
+        ('Contact Details', {
+            'fields': ['email', 'phone']
         }),
     ]
-    ordering = ['-version_number', '-created_at']
-    
-    def get_base_type(self, obj):
-        return obj.get_base_type()
-    get_base_type.short_description = 'Base Type'
+    ordering = ['partner', 'name']
 
+
+@admin.register(StructureRequest)
+class StructureRequestAdmin(admin.ModelAdmin):
+    list_display = ['__str__', 'status', 'submitted_at', 'get_requesting_parties']
+    list_filter = ['status', 'submitted_at']
+    search_fields = ['description']
+    filter_horizontal = ['requesting_parties']
+    fieldsets = [
+        ('Request Details', {
+            'fields': ['description', 'requesting_parties']
+        }),
+        ('Point of Contact', {
+            'fields': ['point_of_contact_party', 'point_of_contact_partner', 'point_of_contact_contact']
+        }),
+        ('Status', {
+            'fields': ['status']
+        }),
+    ]
+    ordering = ['-submitted_at']
+    readonly_fields = ['submitted_at', 'updated_at']
+
+    def get_requesting_parties(self, obj):
+        return ", ".join([party.name for party in obj.requesting_parties.all()[:3]])
+    get_requesting_parties.short_description = 'Requesting Parties'
+
+
+@admin.register(StructureApproval)
+class StructureApprovalAdmin(admin.ModelAdmin):
+    list_display = ['structure', 'action', 'action_date', 'processed_by']
+    list_filter = ['action', 'action_date']
+    search_fields = ['structure__name']
+    fieldsets = [
+        ('Structure Information', {
+            'fields': ['structure']
+        }),
+        ('Approval Action', {
+            'fields': ['action']
+        }),
+        ('Action Details', {
+            'fields': ['approver', 'final_price', 'correction_comment', 'rejector', 'rejection_reason']
+        }),
+        ('Processing Information', {
+            'fields': ['processed_by']
+        }),
+    ]
+    ordering = ['-action_date']
+    readonly_fields = ['action_date']
+
+
+# Note: Legacy models (Product, ProductHierarchy, PersonalizedProduct) are kept in models.py
+# but not registered in admin to avoid confusion. They will be migrated in future phases.
 
