@@ -2,18 +2,19 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
-from datetime import timedelta
 
 
-class Entity(models.Model):
+class Structure(models.Model):
     """
-    Represents a legal entity (formerly LegalStructure/Structure)
-    Removed: description field (no longer needed)
-    Modified: costs management moved to FINANCIAL_DEPARTMENT app
-    Enhanced: template management in Implementation subsection
+    Model representing legal structures available in the SIRIUS system.
+    Each structure contains detailed information about costs, tax implications,
+    privacy impacts, and operational requirements.
+
+    This model combines the comprehensive features from Legal Structures
+    (Estrutura) with enhanced corporate features for a complete solution.
     """
 
-    ENTITY_TYPES = [
+    TIPOS_ESTRUTURA = [
         ("TRUST", "Trust"),
         ("FOREIGN_TRUST", "Foreign Trust"),
         ("FUND", "Fund"),
@@ -25,6 +26,8 @@ class Entity(models.Model):
         ("WYOMING_FOUNDATION", "Wyoming Statutory Foundation"),
     ]
 
+    # Nova classificação fiscal como campo de texto (substitui
+    # TaxClassification)
     TAX_CLASSIFICATION_CHOICES = [
         ("TRUST", "Trust"),
         ("FOREIGN_TRUST", "Foreign Trust"),
@@ -36,7 +39,7 @@ class Entity(models.Model):
         ("VIRTUAL_ASSET", "Virtual Asset"),
     ]
 
-    JURISDICTIONS = [
+    JURISDICOES = [
         ("US", "United States"),
         ("BS", "Bahamas"),
         ("BR", "Brazil"),
@@ -131,44 +134,50 @@ class Entity(models.Model):
     ]
 
     # Basic Information
-    name = models.CharField(max_length=100, help_text="Entity name")
-    entity_type = models.CharField(
+    nome = models.CharField(max_length=100, help_text="Structure name")
+    tipo = models.CharField(
         max_length=50,
-        choices=ENTITY_TYPES,
-        help_text="Type of legal entity",
+        choices=TIPOS_ESTRUTURA,
+        help_text="Structure type",
         default="CORP",
     )
 
-    # Tax classification
+    # Nova classificação fiscal (substitui ManyToMany TaxClassification)
     tax_classification = models.CharField(
         max_length=50,
         choices=TAX_CLASSIFICATION_CHOICES,
         blank=True,
-        help_text="Tax classification for this entity",
+        help_text="Tax classification for this structure",
     )
 
-    # Template Management (moved to Implementation subsection)
-    implementation_templates = models.JSONField(
+    descricao = models.TextField(
+        help_text="Detailed description of the structure"
+    )
+
+    # Templates (substitui campo implementation)
+    templates = models.JSONField(
         default=list,
-        blank=True,
-        help_text="Optional templates for implementation (not raw JSON storage)",
+        help_text=(
+            "List of templates: [{'name': 'Template Name', "
+            "'url': 'http://...'}]"
+        ),
     )
 
     # Jurisdiction Information
-    jurisdiction = models.CharField(
+    jurisdicao = models.CharField(
         max_length=10,
-        choices=JURISDICTIONS,
+        choices=JURISDICOES,
         default="US",
         help_text="Primary jurisdiction",
     )
-    us_state = models.CharField(
+    estado_us = models.CharField(
         max_length=10,
         choices=US_STATES,
         blank=True,
         null=True,
         help_text="US State (only if jurisdiction is United States)",
     )
-    br_state = models.CharField(
+    estado_br = models.CharField(
         max_length=10,
         choices=BR_STATES,
         blank=True,
@@ -176,58 +185,70 @@ class Entity(models.Model):
         help_text="Brazilian State (only if jurisdiction is Brazil)",
     )
 
+    # Cost Information
+    custo_base = models.DecimalField(
+        max_digits=10, decimal_places=2, help_text="Base setup cost in USD"
+    )
+    custo_manutencao = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Annual maintenance cost in USD",
+    )
+
     # Implementation Details
-    implementation_time = models.IntegerField(
+    tempo_implementacao = models.IntegerField(
         help_text="Implementation time in days",
         validators=[MinValueValidator(1), MaxValueValidator(365)],
         default=30,
     )
-    complexity = models.IntegerField(
+    complexidade = models.IntegerField(
         choices=[(i, f"Level {i}") for i in range(1, 6)],
         help_text="Complexity level from 1 (simple) to 5 (very complex)",
         default=3,
     )
 
     # Tax Impact Information
-    tax_impact_usa = models.TextField(
+    impacto_tributario_eua = models.TextField(
         help_text="Detailed tax implications in the United States",
         default="To be determined",
     )
-    tax_impact_brazil = models.TextField(
+    impacto_tributario_brasil = models.TextField(
         help_text="Detailed tax implications in Brazil",
         default="To be determined",
     )
-    tax_impact_others = models.TextField(
+    impacto_tributario_outros = models.TextField(
         blank=True, help_text="Tax implications in other jurisdictions"
     )
 
     # Privacy and Asset Protection
-    confidentiality_level = models.IntegerField(
+    nivel_confidencialidade = models.IntegerField(
         choices=[(i, f"Level {i}") for i in range(1, 6)],
         help_text="Confidentiality level from 1 (low) to 5 (very high)",
         default=3,
     )
-    asset_protection = models.IntegerField(
+    protecao_patrimonial = models.IntegerField(
         choices=[(i, f"Level {i}") for i in range(1, 6)],
         help_text="Asset protection level from 1 (low) to 5 (very high)",
         default=3,
     )
-    privacy_impact = models.TextField(
+    impacto_privacidade = models.TextField(
         help_text="Detailed privacy implications and protections",
         default="Standard privacy protections apply",
     )
 
-    # Privacy Score (0-3) replaces privacy_score (0-100)
+    # Novo: Privacy Score discreto (0-3) substitui privacidade_score (0-100)
     privacy_score = models.IntegerField(
         choices=[(i, f"Level {i}") for i in range(0, 4)],
         help_text="Privacy score from 0 (lowest) to 3 (highest)",
         default=1,
     )
 
-    # Banking Relation Score (1-3)
+    # Novo: Banking Relation Score (1-3)
     banking_relation_score = models.IntegerField(
         choices=[(i, f"Level {i}") for i in range(1, 4)],
-        help_text="Banking relationship difficulty from 1 (easy) to 3 (difficult)",
+        help_text=(
+            "Banking relationship difficulty from 1 (easy) to 3 (difficult)"
+        ),
         default=2,
     )
     compliance_score = models.IntegerField(
@@ -238,55 +259,62 @@ class Entity(models.Model):
     )
 
     # Operational Information
-    banking_facility = models.IntegerField(
+    facilidade_banking = models.IntegerField(
         choices=[(i, f"Level {i}") for i in range(1, 6)],
         help_text="Banking facility level from 1 (difficult) to 5 (very easy)",
         default=3,
     )
-    required_documentation = models.TextField(
+    documentacao_necessaria = models.TextField(
         help_text="Required documentation for setup",
         default="Standard documentation required",
     )
+    documentos_necessarios = models.TextField(
+        blank=True,
+        help_text="Additional required documents for setup (legacy field)",
+    )
 
     # Document URLs
-    documents_url = models.URLField(
-        blank=True, help_text="URL for entity documents and templates"
+    url_documentos = models.URLField(
+        blank=True, help_text="URL for structure documents and templates"
     )
 
     # Compliance and Reporting
-    required_forms_usa = models.TextField(
+    formularios_obrigatorios_eua = models.TextField(
         blank=True, help_text="Required US forms and reporting obligations"
     )
-    required_forms_brazil = models.TextField(
+    formularios_obrigatorios_brasil = models.TextField(
         blank=True,
         help_text="Required Brazilian forms and reporting obligations",
     )
 
     # Status and Metadata
-    active = models.BooleanField(
-        default=True, help_text="Whether entity is active"
+    ativo = models.BooleanField(
+        default=True, help_text="Whether structure is active"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Entity"
-        verbose_name_plural = "Entities"
-        ordering = ["name"]
+        verbose_name = "Legal Structure"
+        verbose_name_plural = "Legal Structures"
+        ordering = ["nome"]
         indexes = [
-            models.Index(fields=["jurisdiction"]),
-            models.Index(fields=["active"]),
-            models.Index(fields=["entity_type"]),
-            models.Index(fields=["complexity"]),
+            models.Index(fields=["jurisdicao"]),
+            models.Index(fields=["ativo"]),
+            models.Index(fields=["tipo"]),
+            models.Index(fields=["complexidade"]),
         ]
 
     def __str__(self):
-        return f"{self.name} ({self.get_entity_type_display()})"
+        return f"{self.nome} ({self.get_tipo_display()})"
 
     def save(self, *args, **kwargs):
-        """Auto-calculate privacy score from confidentiality_level if not set"""
-        if self.confidentiality_level and not self.privacy_score:
-            self.privacy_score = min(3, (self.confidentiality_level - 1))
+        """Auto-calculate privacy score from nivel_confidencialidade if not
+        set"""
+        if self.nivel_confidencialidade and not self.privacy_score:
+            self.privacy_score = min(
+                3, (self.nivel_confidencialidade - 1)
+            )  # Convert 1-5 to 0-3
         super().save(*args, **kwargs)
 
     def clean(self):
@@ -294,16 +322,33 @@ class Entity(models.Model):
         super().clean()
 
         # Validate US state is only set when jurisdiction is US
-        if self.us_state and self.jurisdiction != "US":
+        if self.estado_us and self.jurisdicao != "US":
             raise ValidationError(
-                {"us_state": "US State can only be set when jurisdiction is US"}
+                {
+                    "estado_us": (
+                        "US State can only be set when jurisdiction is US"
+                    )
+                }
             )
 
         # Validate BR state is only set when jurisdiction is BR
-        if self.br_state and self.jurisdiction != "BR":
+        if self.estado_br and self.jurisdicao != "BR":
             raise ValidationError(
-                {"br_state": "Brazilian State can only be set when jurisdiction is Brazil"}
+                {
+                    "estado_br": (
+                        "Brazilian State can only be set when jurisdiction is "
+                        "Brazil"
+                    )
+                }
             )
+
+        # Consolidate documentation fields
+        if self.documentos_necessarios and not self.documentacao_necessaria:
+            self.documentacao_necessaria = self.documentos_necessarios
+
+    def get_custo_total_primeiro_ano(self):
+        """Calculate total first year cost including setup and maintenance"""
+        return self.custo_base + self.custo_manutencao
 
     def get_complexity_display_text(self):
         """Get human-readable complexity description"""
@@ -314,17 +359,17 @@ class Entity(models.Model):
             4: "Complex",
             5: "Very Complex",
         }
-        return complexity_map.get(self.complexity, "Unknown")
+        return complexity_map.get(self.complexidade, "Unknown")
 
     def get_full_jurisdiction_display(self):
         """Get full jurisdiction including state if applicable"""
-        jurisdiction = self.get_jurisdiction_display()
+        jurisdiction = self.get_jurisdicao_display()
 
-        if self.jurisdiction == "US" and self.us_state:
-            state = dict(self.US_STATES).get(self.us_state, self.us_state)
+        if self.jurisdicao == "US" and self.estado_us:
+            state = dict(self.US_STATES).get(self.estado_us, self.estado_us)
             return f"{state}, {jurisdiction}"
-        elif self.jurisdiction == "BR" and self.br_state:
-            state = dict(self.BR_STATES).get(self.br_state, self.br_state)
+        elif self.jurisdicao == "BR" and self.estado_br:
+            state = dict(self.BR_STATES).get(self.estado_br, self.estado_br)
             return f"{state}, {jurisdiction}"
 
         return jurisdiction
@@ -339,11 +384,11 @@ class Entity(models.Model):
 
     def get_templates_list(self):
         """Return formatted list of templates"""
-        if not self.implementation_templates:
+        if not self.templates:
             return []
         return [
             f"{template.get('name', 'Unknown')} ({template.get('url', 'No URL')})"
-            for template in self.implementation_templates
+            for template in self.templates
         ]
 
     def get_privacy_score_display(self):
@@ -372,267 +417,9 @@ class Entity(models.Model):
         return "Not set"
 
 
-class Structure(models.Model):
-    """
-    Represents ownership hierarchies (corporate tree) among Entities and UBOs
-    Purpose: Model complex corporate ownership structures
-    """
-
-    STATUS_CHOICES = [
-        ('DRAFTING', 'Drafting'),
-        ('SENT_FOR_APPROVAL', 'Sent for Approval'),
-        ('APPROVED', 'Approved'),
-    ]
-
-    name = models.CharField(max_length=200, help_text="Structure name")
-    description = models.TextField(help_text="Structure description")
-
-    # Status Management
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFTING')
-
-    # Validation aggregated fields
-    tax_impacts = models.TextField(
-        blank=True,
-        help_text="Aggregated tax impacts from validation rules"
-    )
-    severity_levels = models.TextField(
-        blank=True,
-        help_text="Aggregated severity levels from validation rules"
-    )
-
-    # Metadata
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Structure"
-        verbose_name_plural = "Structures"
-        ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["status"]),
-            models.Index(fields=["created_at"]),
-        ]
-
-    def __str__(self):
-        return f"{self.name} ({self.get_status_display()})"
-
-    def save(self, *args, **kwargs):
-        # Implement warning color for drafts in admin interface
-        super().save(*args, **kwargs)
-        
-        if self.status == 'SENT_FOR_APPROVAL':
-            # Trigger notification to approvers
-            self.notify_approvers()
-
-    def notify_approvers(self):
-        """Implement notification system for approvers"""
-        # TODO: Implement notification logic
-        pass
-
-
-class EntityOwnership(models.Model):
-    """
-    Manages ownership relationships within a Structure
-    Handles both UBO → Entity and Entity → Entity ownership
-    """
-
-    structure = models.ForeignKey(Structure, on_delete=models.CASCADE)
-
-    # Owner can be either UBO or Entity
-    owner_ubo = models.ForeignKey(
-        'parties.Party', 
-        null=True, 
-        blank=True, 
-        on_delete=models.CASCADE,
-        help_text="UBO owner"
-    )
-    owner_entity = models.ForeignKey(
-        Entity, 
-        null=True, 
-        blank=True, 
-        on_delete=models.CASCADE, 
-        related_name='owned_entities',
-        help_text="Entity owner"
-    )
-
-    # Owned entity
-    owned_entity = models.ForeignKey(
-        Entity, 
-        on_delete=models.CASCADE, 
-        related_name='ownership_records'
-    )
-
-    # Share management
-    total_shares = models.PositiveIntegerField(help_text="Total shares of the owned entity")
-    owned_shares = models.PositiveIntegerField(help_text="Shares owned by this owner")
-    ownership_percentage = models.DecimalField(
-        max_digits=5, 
-        decimal_places=2,
-        help_text="Ownership percentage (auto-calculated)"
-    )
-
-    # Share valuation (optional)
-    share_value_usd = models.DecimalField(
-        max_digits=15, 
-        decimal_places=2, 
-        null=True, 
-        blank=True,
-        validators=[MinValueValidator(0.01)]
-    )
-    share_value_eur = models.DecimalField(
-        max_digits=15, 
-        decimal_places=2, 
-        null=True, 
-        blank=True,
-        validators=[MinValueValidator(0.01)]
-    )
-
-    # Corporate identification
-    corporate_name = models.CharField(max_length=200, blank=True)
-    hash_number = models.CharField(max_length=100, blank=True)
-
-    class Meta:
-        verbose_name = "Entity Ownership"
-        verbose_name_plural = "Entity Ownerships"
-        unique_together = ['structure', 'owner_ubo', 'owner_entity', 'owned_entity']
-        indexes = [
-            models.Index(fields=["structure"]),
-            models.Index(fields=["owned_entity"]),
-        ]
-
-    def __str__(self):
-        owner_name = ""
-        if self.owner_ubo:
-            owner_name = str(self.owner_ubo)
-        elif self.owner_entity:
-            owner_name = str(self.owner_entity)
-        
-        return f"{owner_name} owns {self.ownership_percentage}% of {self.owned_entity.name}"
-
-    def clean(self):
-        # Validate that exactly one owner type is specified
-        if not (bool(self.owner_ubo) ^ bool(self.owner_entity)):
-            raise ValidationError("Must specify exactly one owner (UBO or Entity)")
-
-        # Validate share distribution totals 100%
-        self.validate_share_distribution()
-
-    def save(self, *args, **kwargs):
-        # Auto-calculate percentage from shares
-        if self.owned_shares and self.total_shares:
-            self.ownership_percentage = (self.owned_shares / self.total_shares) * 100
-
-        # Auto-calculate shares from percentage
-        elif self.ownership_percentage and self.total_shares:
-            self.owned_shares = int((self.ownership_percentage / 100) * self.total_shares)
-
-        super().save(*args, **kwargs)
-
-    def validate_share_distribution(self):
-        """Ensure total ownership equals 100%"""
-        total_ownership = EntityOwnership.objects.filter(
-            structure=self.structure,
-            owned_entity=self.owned_entity
-        ).exclude(pk=self.pk).aggregate(
-            total=models.Sum('ownership_percentage')
-        )['total'] or 0
-
-        if total_ownership + self.ownership_percentage > 100:
-            raise ValidationError("Total ownership cannot exceed 100%")
-
-
-class MasterEntity(models.Model):
-    """
-    Designates Master Entities (roots) of a Structure
-    Only UBOs can own Master Entities
-    """
-
-    structure = models.ForeignKey(Structure, on_delete=models.CASCADE)
-    entity = models.ForeignKey(Entity, on_delete=models.CASCADE)
-
-    class Meta:
-        verbose_name = "Master Entity"
-        verbose_name_plural = "Master Entities"
-        unique_together = ['structure', 'entity']
-        indexes = [
-            models.Index(fields=["structure"]),
-            models.Index(fields=["entity"]),
-        ]
-
-    def __str__(self):
-        return f"{self.entity.name} (Master in {self.structure.name})"
-
-
-class ValidationRule(models.Model):
-    """
-    Enhanced validation rules for entity combinations
-    Removed: conditions field
-    Renamed: structure_a → parent_entity, structure_b → related_entity
-    Added: tax_impacts field
-    """
-
-    RELATIONSHIP_TYPES = [
-        ("REQUIRED", "Required Combination"),
-        ("RECOMMENDED", "Recommended Combination"),
-        ("INCOMPATIBLE", "Incompatible Combination"),
-        ("CONDITIONAL", "Conditional Combination"),
-        ("SYNERGISTIC", "Synergistic Combination"),
-    ]
-
-    SEVERITY_CHOICES = [
-        ("ERROR", "Error - Blocks configuration"),
-        ("WARNING", "Warning - Potential issue"),
-        ("INFO", "Information - Suggestion"),
-    ]
-
-    parent_entity = models.ForeignKey(
-        Entity,
-        on_delete=models.CASCADE,
-        related_name='parent_validation_rules'
-    )
-    related_entity = models.ForeignKey(
-        Entity,
-        on_delete=models.CASCADE,
-        related_name='related_validation_rules'
-    )
-
-    relationship_type = models.CharField(max_length=20, choices=RELATIONSHIP_TYPES)
-    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES)
-    description = models.TextField()
-
-    # New field for tax impact explanations
-    tax_impacts = models.TextField(
-        help_text="Detailed tax implications of this entity combination"
-    )
-
-    jurisdiction = models.CharField(max_length=100, blank=True)
-    active = models.BooleanField(default=True)
-
-    # Metadata
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Validation Rule"
-        verbose_name_plural = "Validation Rules"
-        unique_together = ["parent_entity", "related_entity", "relationship_type"]
-        indexes = [
-            models.Index(fields=["parent_entity"]),
-            models.Index(fields=["related_entity"]),
-            models.Index(fields=["active"]),
-        ]
-
-    def __str__(self):
-        return f"{self.parent_entity.name} -> {self.related_entity.name} ({self.get_relationship_type_display()})"
-
-
-# Keep existing models that don't need changes for now
-# We'll update references in later phases
-
 class UBO(models.Model):
     """
     Ultimate Beneficial Owner - represents the ultimate beneficial owners of structures
-    This model will be migrated to parties.Party in Phase 3
     """
 
     TIPO_PESSOA = [
@@ -766,6 +553,92 @@ class UBO(models.Model):
         partes = [endereco_base, self.cidade, self.estado, self.pais, self.cep]
         return ", ".join([parte for parte in partes if parte])
 
+    def get_products_associados(self):
+        """Retorna todos os Products associados a este UBO"""
+        from sales.models import PersonalizedProduct
+
+        return PersonalizedProduct.objects.filter(ubos=self, ativo=True)
+
+    def get_structures_associadas(self):
+        """Retorna todas as Legal Structures associadas a este UBO"""
+        structures = []
+        for pp in self.get_products_associados():
+            if pp.base_structure:
+                structures.append(pp.base_structure)
+            elif pp.base_product:
+                # Get structures from product hierarchies
+                for hierarchy in pp.base_product.producthierarchy_set.all():
+                    structures.append(hierarchy.structure)
+        return list(set(structures))  # Remove duplicates
+
+
+class ValidationRule(models.Model):
+    """
+    Model representing validation rules between different legal structures.
+    Defines compatibility, requirements, and restrictions between structures.
+    """
+
+    TIPOS_RELACIONAMENTO = [
+        ("REQUIRED", "Required Combination"),
+        ("RECOMMENDED", "Recommended Combination"),
+        ("INCOMPATIBLE", "Incompatible Combination"),
+        ("CONDITIONAL", "Conditional Combination"),
+        ("SYNERGISTIC", "Synergistic Combination"),
+    ]
+
+    SEVERIDADE = [
+        ("ERROR", "Error - Blocks configuration"),
+        ("WARNING", "Warning - Potential issue"),
+        ("INFO", "Information - Suggestion"),
+    ]
+
+    estrutura_a = models.ForeignKey(
+        Structure,
+        on_delete=models.CASCADE,
+        related_name="regras_como_a",
+        help_text="First structure in the relationship",
+    )
+    estrutura_b = models.ForeignKey(
+        Structure,
+        on_delete=models.CASCADE,
+        related_name="regras_como_b",
+        help_text="Second structure in the relationship",
+    )
+    tipo_relacionamento = models.CharField(
+        max_length=20,
+        choices=TIPOS_RELACIONAMENTO,
+        help_text="Type of relationship between structures",
+    )
+    severidade = models.CharField(
+        max_length=10,
+        choices=SEVERIDADE,
+        default="INFO",
+        help_text="Severity level of the validation rule",
+    )
+    descricao = models.TextField(
+        help_text="Detailed description of the validation rule"
+    )
+    condicoes = models.JSONField(
+        blank=True,
+        null=True,
+        help_text="JSON object containing specific conditions for the rule",
+    )
+    jurisdicao_aplicavel = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Specific jurisdiction where this rule applies",
+    )
+    ativo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Validation Rule"
+        verbose_name_plural = "Validation Rules"
+        unique_together = ["estrutura_a", "estrutura_b", "tipo_relacionamento"]
+
+    def __str__(self):
+        return f"{self.estrutura_a.nome} -> {self.estrutura_b.nome} ({self.get_tipo_relacionamento_display()})"
+
 
 class JurisdictionAlert(models.Model):
     """
@@ -815,11 +688,11 @@ class JurisdictionAlert(models.Model):
     titulo = models.CharField(max_length=200, help_text="Alert title")
     descricao = models.TextField(help_text="Detailed alert description")
 
-    # Applicability - Updated to use Entity instead of Structure
+    # Applicability
     estruturas_aplicaveis = models.ManyToManyField(
-        Entity,
+        Structure,
         blank=True,
-        help_text="Entities to which this alert applies",
+        help_text="Structures to which this alert applies",
     )
 
     # Deadline Management
@@ -1020,11 +893,42 @@ class JurisdictionAlert(models.Model):
         else:
             return "#6c757d"  # Gray
 
+    def get_applicable_entities(self):
+        """Get all entities (structures only) this alert applies to"""
+        entities = []
+        entities.extend(list(self.estruturas_aplicaveis.all()))
+        # UBOs removed as per specification
+        return entities
+
+    def create_service_activity(
+        self, activity_title=None, responsible_person=None
+    ):
+        """Create a ServiceActivity if this alert is connected to a service"""
+        if not self.service_connection:
+            return None
+
+        # Import here to avoid circular import
+        from corporate_relationship.models import ServiceActivity
+
+        activity = ServiceActivity.objects.create(
+            service=self.service_connection,
+            activity_title=activity_title or f"Alert: {self.titulo}",
+            activity_description=(
+                f"Compliance activity for {self.titulo}. " f"{self.descricao}"
+            ),
+            start_date=timezone.now().date(),
+            due_date=self.next_deadline,
+            status="PLANNED",
+            priority="HIGH" if self.prioridade >= 4 else "MEDIUM",
+            responsible_person=responsible_person or "Compliance Team",
+        )
+
+        return activity
+
 
 class Successor(models.Model):
     """
     Modelo para gestão de sucessão entre UBOs
-    This model will be migrated to parties.BeneficiaryRelation in Phase 3
     """
 
     # Relacionamentos
@@ -1118,25 +1022,46 @@ class Successor(models.Model):
                 }
             )
 
+    @classmethod
+    def validar_percentuais_completos(cls, ubo_proprietario):
+        """Valida se os percentuais de um UBO somam exatamente 100%"""
+        total = (
+            cls.objects.filter(
+                ubo_proprietario=ubo_proprietario, ativo=True
+            ).aggregate(total=models.Sum("percentual"))["total"]
+            or 0
+        )
+
+        # Tolerância para problemas de precisão decimal
+        return abs(total - 100) < 0.01
+
+    def get_percentual_disponivel(self):
+        """Retorna o percentual ainda disponível para o UBO proprietário"""
+        outros_sucessores = Successor.objects.filter(
+            ubo_proprietario=self.ubo_proprietario, ativo=True
+        ).exclude(pk=self.pk if self.pk else None)
+
+        total_usado = sum(s.percentual for s in outros_sucessores)
+        return 100 - total_usado
+
 
 class StructureOwnership(models.Model):
     """
     Tabela de propriedade entre estruturas (N↔N não-simétrica).
     Mapeia participação societária de uma estrutura em outra.
-    This model will be updated to use Entity instead of Structure in later phases
     """
 
     parent = models.ForeignKey(
-        Entity,  # Updated to use Entity
+        Structure,
         on_delete=models.CASCADE,
-        related_name="owned_entities_legacy",
-        help_text="Entity proprietária (parent)",
+        related_name="owned_structures",
+        help_text="Estrutura proprietária (parent)",
     )
     child = models.ForeignKey(
-        Entity,  # Updated to use Entity
+        Structure,
         on_delete=models.CASCADE,
-        related_name="ownership_by_legacy",
-        help_text="Entity possuída (child)",
+        related_name="ownership_by",
+        help_text="Estrutura possuída (child)",
     )
     percentage = models.DecimalField(
         max_digits=5,
@@ -1150,15 +1075,15 @@ class StructureOwnership(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Structure Ownership (Legacy)"
-        verbose_name_plural = "Structure Ownerships (Legacy)"
+        verbose_name = "Structure Ownership"
+        verbose_name_plural = "Structure Ownerships"
         unique_together = ["parent", "child"]
         ordering = ["-percentage"]
 
     def __str__(self):
         return (
-            f"{self.parent.name} owns {self.percentage}% of "
-            f"{self.child.name}"
+            f"{self.parent.nome} owns {self.percentage}% of "
+            f"{self.child.nome}"
         )
 
     def clean(self):
@@ -1167,5 +1092,7 @@ class StructureOwnership(models.Model):
 
         # Validar que parent não é o mesmo que child
         if self.parent == self.child:
-            raise ValidationError("Entity cannot own itself")
+            raise ValidationError("Structure cannot own itself")
 
+        # TODO: Validar ciclos na hierarquia de propriedade
+        # FIXME: implementar detecção de ciclos para evitar loops infinitos

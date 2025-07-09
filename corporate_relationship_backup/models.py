@@ -1,65 +1,67 @@
 from django.conf import settings
 from django.db import models
 from djmoney.models.fields import MoneyField
-import uuid
 
 
-class File(models.Model):
+class Client(models.Model):
     """
-    Represents approved structures
-    Created when structure status becomes 'APPROVED'
+    Cliente no sistema de relacionamento corporativo.
+    Representa empresas/entidades que contratam serviços.
     """
 
-    structure = models.OneToOneField(
-        'corporate.Structure',
-        on_delete=models.CASCADE,
-        help_text="Reference to approved structure"
+    company_name = models.CharField(
+        max_length=120, help_text="Nome da empresa cliente"
     )
-
-    approved_by = models.ForeignKey(
-        'parties.Party',
-        on_delete=models.SET_NULL,
-        null=True,
-        help_text="Party who approved the structure"
+    address = models.TextField(help_text="Endereço completo do cliente")
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="Data de criação do registro"
     )
-    approval_date = models.DateTimeField(help_text="When the structure was approved")
-
-    # File metadata
-    file_number = models.CharField(max_length=50, unique=True, help_text="Unique file identifier")
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "File"
-        verbose_name_plural = "Files"
-        ordering = ["-approval_date"]
-        indexes = [
-            models.Index(fields=["file_number"]),
-            models.Index(fields=["approval_date"]),
-        ]
+        verbose_name = "Client"
+        verbose_name_plural = "Clients"
+        ordering = ["company_name"]
 
     def __str__(self):
-        return f"File {self.file_number} - {self.structure.name}"
-
-    def save(self, *args, **kwargs):
-        if not self.file_number:
-            # Auto-generate file number
-            self.file_number = self.generate_file_number()
-        super().save(*args, **kwargs)
-
-    def generate_file_number(self):
-        """Generate unique file number"""
-        return f"FILE-{uuid.uuid4().hex[:8].upper()}"
+        return self.company_name
 
 
-# Keep existing models but update references where needed
+class Contact(models.Model):
+    """
+    Contato dentro de um cliente.
+    Representa pessoas de contato para comunicação.
+    """
+
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.CASCADE,
+        related_name="contacts",
+        help_text="Cliente ao qual este contato pertence",
+    )
+    name = models.CharField(
+        max_length=120, help_text="Nome completo do contato"
+    )
+    role = models.CharField(
+        max_length=80, help_text="Função/cargo (ex.: Diretor Financeiro)"
+    )
+    phone = models.CharField(
+        max_length=40, blank=True, help_text="Número de telefone"
+    )
+    email = models.EmailField(help_text="Email para contato")
+
+    class Meta:
+        verbose_name = "Contact"
+        verbose_name_plural = "Contacts"
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.role}) - {self.client.company_name}"
+
 
 class RelationshipStructure(models.Model):
     """
     Relacionamento entre uma Structure e um Client.
     Criado automaticamente quando um PersonalizedProduct é aprovado.
-    Updated to work with new structure
     """
 
     STATUS_CHOICES = [
@@ -68,14 +70,14 @@ class RelationshipStructure(models.Model):
     ]
 
     structure = models.ForeignKey(
-        "corporate.Structure",  # This now refers to the new Structure model
+        "corporate.Structure",
         on_delete=models.CASCADE,
         help_text="Estrutura legal relacionada",
     )
     client = models.ForeignKey(
-        "sales.Partner",  # Updated to use Partner instead of Client
+        Client,
         on_delete=models.CASCADE,
-        help_text="Partner proprietário da estrutura",
+        help_text="Cliente proprietário da estrutura",
     )
     status = models.CharField(
         max_length=15,
@@ -92,21 +94,15 @@ class RelationshipStructure(models.Model):
         verbose_name_plural = "Relationship Structures"
         unique_together = ["structure", "client"]
         ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["structure"]),
-            models.Index(fields=["client"]),
-            models.Index(fields=["status"]),
-        ]
 
     def __str__(self):
-        return f"{self.structure.name} - {self.client.company_name}"
+        return f"{self.structure.nome} - {self.client.company_name}"
 
 
 class Service(models.Model):
     """
     Serviço que pode ser executado para um cliente.
     Migrado de corporate.Service com suporte multi-moeda.
-    Updated to work with new structure
     """
 
     name = models.CharField(max_length=120, help_text="Nome do serviço")
@@ -138,7 +134,7 @@ class Service(models.Model):
         max_length=120, help_text="Nome do órgão/entidade receptora"
     )
     informed = models.ManyToManyField(
-        "sales.Contact",  # Updated to use Contact from sales app
+        Contact,
         blank=True,
         help_text="Contatos do cliente a serem notificados",
     )
@@ -160,11 +156,6 @@ class Service(models.Model):
         verbose_name = "Service"
         verbose_name_plural = "Services"
         ordering = ["name"]
-        indexes = [
-            models.Index(fields=["name"]),
-            models.Index(fields=["executor"]),
-            models.Index(fields=["created_at"]),
-        ]
 
     def __str__(self):
         return f"{self.name} - {self.counterparty_name}"
@@ -178,21 +169,11 @@ class ServiceActivity(models.Model):
     """
     Atividade específica dentro de um serviço.
     Permite rastreamento detalhado da execução.
-    Enhanced with more detailed tracking
     """
 
     STATUS_CHOICES = [
-        ("PLANNED", "Planned"),
-        ("IN_PROGRESS", "In Progress"),
-        ("COMPLETED", "Completed"),
-        ("CANCELLED", "Cancelled"),
-    ]
-
-    PRIORITY_CHOICES = [
-        ("LOW", "Low"),
-        ("MEDIUM", "Medium"),
-        ("HIGH", "High"),
-        ("URGENT", "Urgent"),
+        ("TODO", "To do"),
+        ("DONE", "Done"),
     ]
 
     service = models.ForeignKey(
@@ -201,39 +182,16 @@ class ServiceActivity(models.Model):
         related_name="activities",
         help_text="Serviço ao qual esta atividade pertence",
     )
-
-    # Activity details
-    activity_title = models.CharField(max_length=200, help_text="Título da atividade")
-    activity_description = models.TextField(blank=True, help_text="Descrição detalhada da atividade")
-    
-    # Scheduling
-    start_date = models.DateField(help_text="Data de início planejada")
-    due_date = models.DateField(null=True, blank=True, help_text="Data de vencimento")
-    completed_date = models.DateField(null=True, blank=True, help_text="Data de conclusão real")
-
-    # Status and priority
+    order = models.PositiveSmallIntegerField(
+        help_text="Ordem de execução da atividade"
+    )
+    name = models.CharField(max_length=120, help_text="Nome da atividade")
     status = models.CharField(
         max_length=12,
         choices=STATUS_CHOICES,
-        default="PLANNED",
+        default="TODO",
         help_text="Status da atividade",
     )
-    priority = models.CharField(
-        max_length=10,
-        choices=PRIORITY_CHOICES,
-        default="MEDIUM",
-        help_text="Prioridade da atividade",
-    )
-
-    # Responsibility
-    responsible_person = models.CharField(
-        max_length=200,
-        blank=True,
-        help_text="Pessoa responsável pela atividade"
-    )
-
-    # Notes and comments
-    notes = models.TextField(blank=True, help_text="Notas e comentários")
 
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
@@ -242,31 +200,11 @@ class ServiceActivity(models.Model):
     class Meta:
         verbose_name = "Service Activity"
         verbose_name_plural = "Service Activities"
-        ordering = ["due_date", "priority", "start_date"]
-        indexes = [
-            models.Index(fields=["service"]),
-            models.Index(fields=["status"]),
-            models.Index(fields=["due_date"]),
-            models.Index(fields=["priority"]),
-        ]
+        ordering = ["order"]
+        unique_together = ["service", "order"]
 
     def __str__(self):
-        return f"{self.service.name} - {self.activity_title}"
-
-    def is_overdue(self):
-        """Check if activity is overdue"""
-        if not self.due_date or self.status == "COMPLETED":
-            return False
-        from django.utils import timezone
-        return timezone.now().date() > self.due_date
-
-    def days_until_due(self):
-        """Calculate days until due date"""
-        if not self.due_date:
-            return None
-        from django.utils import timezone
-        delta = self.due_date - timezone.now().date()
-        return delta.days
+        return f"{self.service.name} - {self.order}. {self.name}"
 
 
 class WebhookLog(models.Model):
@@ -317,12 +255,6 @@ class WebhookLog(models.Model):
         verbose_name = "Webhook Log"
         verbose_name_plural = "Webhook Logs"
         ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["event_type"]),
-            models.Index(fields=["status"]),
-            models.Index(fields=["created_at"]),
-        ]
 
     def __str__(self):
         return f"{self.event_type} - {self.status} ({self.attempt_count} attempts)"
-

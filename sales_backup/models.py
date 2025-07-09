@@ -2,218 +2,9 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 
-class Partner(models.Model):
-    """
-    Business partners (formerly Client)
-    Links to Party in parties app
-    """
-
-    party = models.OneToOneField('parties.Party', on_delete=models.CASCADE)
-    company_name = models.CharField(max_length=120)
-    address = models.TextField()
-
-    # Additional partner-specific fields
-    partnership_start_date = models.DateField(auto_now_add=True)
-    partnership_status = models.CharField(
-        max_length=20,
-        choices=[('ACTIVE', 'Active'), ('INACTIVE', 'Inactive')],
-        default='ACTIVE'
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Partner"
-        verbose_name_plural = "Partners"
-        ordering = ["company_name"]
-        indexes = [
-            models.Index(fields=["partnership_status"]),
-            models.Index(fields=["created_at"]),
-        ]
-
-    def __str__(self):
-        return self.company_name
-
-
-class Contact(models.Model):
-    """
-    Contacts within partners (moved from corporate_relationship)
-    """
-
-    partner = models.ForeignKey(Partner, on_delete=models.CASCADE, related_name='contacts')
-    name = models.CharField(max_length=120)
-    role = models.CharField(max_length=80)
-    phone = models.CharField(max_length=40, blank=True)
-    email = models.EmailField()
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Contact"
-        verbose_name_plural = "Contacts"
-        ordering = ["name"]
-        indexes = [
-            models.Index(fields=["partner"]),
-            models.Index(fields=["email"]),
-        ]
-
-    def __str__(self):
-        return f"{self.name} ({self.role}) - {self.partner.company_name}"
-
-
-class StructureRequest(models.Model):
-    """
-    Requests for Corporate team to build structures
-    """
-
-    STATUS_CHOICES = [
-        ('SUBMITTED', 'Submitted'),
-        ('IN_REVIEW', 'In Review'),
-        ('IN_PROGRESS', 'In Progress'),
-        ('COMPLETED', 'Completed'),
-        ('REJECTED', 'Rejected'),
-    ]
-
-    description = models.TextField(help_text="Detailed description of requested structure")
-
-    # At least one party required
-    requesting_parties = models.ManyToManyField(
-        'parties.Party', 
-        help_text="Parties requesting the structure"
-    )
-
-    # Point of contact
-    point_of_contact_party = models.ForeignKey(
-        'parties.Party',
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name='poc_requests'
-    )
-    point_of_contact_partner = models.ForeignKey(
-        Partner,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name='poc_requests'
-    )
-    point_of_contact_contact = models.ForeignKey(
-        Contact,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        help_text="Specific contact within partner"
-    )
-
-    # Status tracking
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='SUBMITTED')
-
-    # Metadata
-    submitted_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Structure Request"
-        verbose_name_plural = "Structure Requests"
-        ordering = ["-submitted_at"]
-        indexes = [
-            models.Index(fields=["status"]),
-            models.Index(fields=["submitted_at"]),
-        ]
-
-    def __str__(self):
-        return f"Structure Request #{self.pk} - {self.get_status_display()}"
-
-    def clean(self):
-        # Validate point of contact selection
-        poc_count = sum([
-            bool(self.point_of_contact_party),
-            bool(self.point_of_contact_partner),
-            bool(self.point_of_contact_contact)
-        ])
-        if poc_count != 1:
-            raise ValidationError("Must specify exactly one point of contact")
-
-
-class StructureApproval(models.Model):
-    """
-    Approval workflow for structures
-    Read-only view of structure details with approval actions
-    """
-
-    APPROVAL_ACTIONS = [
-        ('APPROVED', 'Approved'),
-        ('APPROVED_WITH_PRICE_CHANGE', 'Approved with Price Change'),
-        ('NEED_CORRECTION', 'Need Correction'),
-        ('REJECTED', 'Rejected'),
-    ]
-
-    structure = models.OneToOneField('corporate.Structure', on_delete=models.CASCADE)
-    action = models.CharField(max_length=30, choices=APPROVAL_ACTIONS)
-
-    # Action-specific fields
-    approver = models.ForeignKey(
-        'parties.Party',
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        help_text="Who approved (for APPROVED actions)"
-    )
-    final_price = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        help_text="Final price (for APPROVED_WITH_PRICE_CHANGE)"
-    )
-    correction_comment = models.TextField(
-        blank=True,
-        help_text="Comment for corrections needed (for NEED_CORRECTION)"
-    )
-    rejector = models.ForeignKey(
-        'parties.Party',
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name='rejected_structures',
-        help_text="Who rejected (for REJECTED)"
-    )
-    rejection_reason = models.TextField(
-        blank=True,
-        help_text="Reason for rejection (for REJECTED)"
-    )
-
-    # Metadata
-    action_date = models.DateTimeField(auto_now_add=True)
-    processed_by = models.ForeignKey(
-        'auth.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        help_text="System user who processed the approval"
-    )
-
-    class Meta:
-        verbose_name = "Structure Approval"
-        verbose_name_plural = "Structure Approvals"
-        ordering = ["-action_date"]
-        indexes = [
-            models.Index(fields=["structure"]),
-            models.Index(fields=["action"]),
-            models.Index(fields=["action_date"]),
-        ]
-
-    def __str__(self):
-        return f"{self.structure.name} - {self.get_action_display()}"
-
-
-# Keep existing models that are still needed but will be migrated later
-
 class Product(models.Model):
     """
     Produto comercial que conecta duas ou mais Legal Structures
-    This model will be migrated to corporate.Structure in later phases
     """
 
     COMPLEXIDADE_PRODUCT = [
@@ -243,10 +34,10 @@ class Product(models.Model):
 
     # Hierarquia de Legal Structures
     legal_structures = models.ManyToManyField(
-        "corporate.Entity",  # Updated to use Entity instead of Structure
+        "corporate.Structure",
         through="ProductHierarchy",
         through_fields=("product", "structure"),
-        help_text="Legal entities included in this product",
+        help_text="Legal structures included in this product",
     )
 
     # Configuração e custos
@@ -280,8 +71,8 @@ class Product(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Product (Legacy)"
-        verbose_name_plural = "Products (Legacy)"
+        verbose_name = "Product"
+        verbose_name_plural = "Products"
         ordering = ["-uso_count", "commercial_name"]
         indexes = [
             models.Index(fields=["commercial_name"]),
@@ -299,8 +90,7 @@ class Product(models.Model):
         # Calcular automaticamente baseado nas estruturas
         total = 0
         for hierarchy in self.producthierarchy_set.all():
-            # Note: This will need to be updated when Entity pricing is implemented
-            total += 0  # Placeholder - will be calculated from financial_department
+            total += hierarchy.structure.get_custo_total_primeiro_ano()
 
         return total
 
@@ -316,9 +106,9 @@ class ProductHierarchy(models.Model):
         help_text="Product that contains this structure",
     )
     structure = models.ForeignKey(
-        "corporate.Entity",  # Updated to use Entity instead of Structure
+        "corporate.Structure",
         on_delete=models.CASCADE,
-        help_text="Legal entity included in the product",
+        help_text="Legal structure included in the product",
     )
     order = models.PositiveIntegerField(
         help_text="Order of this structure in the product hierarchy"
@@ -342,8 +132,8 @@ class ProductHierarchy(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Product Hierarchy (Legacy)"
-        verbose_name_plural = "Product Hierarchies (Legacy)"
+        verbose_name = "Product Hierarchy"
+        verbose_name_plural = "Product Hierarchies"
         ordering = ["product", "order"]
         unique_together = [["product", "structure"], ["product", "order"]]
         indexes = [
@@ -353,15 +143,14 @@ class ProductHierarchy(models.Model):
     def __str__(self):
         return (
             f"{self.product.commercial_name} - "
-            f"{self.structure.name} (#{self.order})"
+            f"{self.structure.nome} (#{self.order})"
         )
 
     def get_effective_cost(self):
         """Retorna o custo efetivo da estrutura no produto"""
         if self.custom_cost:
             return self.custom_cost
-        # Note: This will need to be updated when Entity pricing is implemented
-        return 0  # Placeholder
+        return self.structure.get_custo_total_primeiro_ano()
 
 
 class PersonalizedProduct(models.Model):
@@ -400,11 +189,11 @@ class PersonalizedProduct(models.Model):
         help_text="Product base para este produto personalizado",
     )
     base_structure = models.ForeignKey(
-        "corporate.Entity",  # Updated to use Entity instead of Structure
+        "corporate.Structure",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        help_text="Legal Entity base para este produto personalizado",
+        help_text="Legal Structure base para este produto personalizado",
     )
 
     # Versionamento
@@ -470,7 +259,7 @@ class PersonalizedProduct(models.Model):
         if self.base_product:
             base_name = self.base_product.commercial_name
         elif self.base_structure:
-            base_name = self.base_structure.name
+            base_name = self.base_structure.nome
 
         return f"{self.nome} (v{self.version_number}) - {base_name}"
 
@@ -512,7 +301,8 @@ class PersonalizedProduct(models.Model):
         if base_obj:
             if hasattr(base_obj, "get_custo_total"):
                 return base_obj.get_custo_total()
-            # Note: This will need to be updated when Entity pricing is implemented
+            elif hasattr(base_obj, "get_custo_total_primeiro_ano"):
+                return base_obj.get_custo_total_primeiro_ano()
 
         return 0
 
@@ -529,4 +319,3 @@ class PersonalizedProduct(models.Model):
             self._previous_status = None
 
         super().save(*args, **kwargs)
-
