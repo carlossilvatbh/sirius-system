@@ -28,6 +28,7 @@ urlpatterns = [
     path('', redirect_to_dashboard, name='home'),
     path('admin/dashboard/', include('dashboard.urls', namespace='dashboard')),
     path('admin/', admin.site.urls),
+    path('corporate/', include('corporate.urls', namespace='corporate')),
 ]
 
 # Serve static files during development

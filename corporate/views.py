@@ -12,7 +12,7 @@ from django.views.generic import TemplateView
 from django.contrib.auth.mixins import UserPassesTestMixin
 import json
 
-from .models import Structure, Entity, EntityOwnership, ValidationRule
+from .models import Structure, Entity, EntityOwnership, ValidationRule, StructureNode, NodeOwnership
 from parties.models import Party
 
 
@@ -600,4 +600,112 @@ def build_ownership_matrix(structure):
         'owners': owners,
         'matrix': matrix
     }
+
+
+class StructureVisualizationView(TemplateView):
+    """
+    Enhanced structure visualization using the new node-based system
+    """
+    template_name = 'corporate/structure_visualization.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        structure_id = self.kwargs.get('structure_id')
+        
+        if structure_id:
+            structure = get_object_or_404(Structure, id=structure_id)
+            context['structure'] = structure
+            context['structure_data'] = self.get_structure_data(structure)
+        else:
+            context['structures'] = Structure.objects.all()
+        
+        return context
+    
+    def get_structure_data(self, structure):
+        """
+        Build hierarchical structure data for visualization
+        """
+        nodes_data = []
+        relationships_data = []
+        
+        # Get all nodes organized by level
+        nodes_by_level = {}
+        for node in structure.nodes.filter(is_active=True).order_by('level', 'custom_name'):
+            level = node.level
+            if level not in nodes_by_level:
+                nodes_by_level[level] = []
+            
+            node_data = {
+                'id': node.id,
+                'name': node.custom_name,
+                'entity_template': node.entity_template.name,
+                'entity_type': node.entity_template.get_entity_type_display(),
+                'level': node.level,
+                'total_shares': node.total_shares,
+                'corporate_name': node.corporate_name,
+                'hash_number': node.hash_number,
+                'parent_id': node.parent_node_id,
+                'children': []
+            }
+            nodes_by_level[level].append(node_data)
+            nodes_data.append(node_data)
+        
+        # Get all ownership relationships
+        for ownership in structure.node_ownerships.all():
+            owner_name = ""
+            owner_type = ""
+            
+            if ownership.owner_party:
+                owner_name = ownership.owner_party.name
+                owner_type = "party"
+            elif ownership.owner_node:
+                owner_name = ownership.owner_node.custom_name
+                owner_type = "node"
+            
+            relationship_data = {
+                'owner_name': owner_name,
+                'owner_type': owner_type,
+                'owner_id': ownership.owner_party_id or ownership.owner_node_id,
+                'owned_node_id': ownership.owned_node_id,
+                'owned_node_name': ownership.owned_node.custom_name,
+                'percentage': float(ownership.ownership_percentage),
+                'shares': ownership.owned_shares,
+                'share_value': float(ownership.share_value_usd or 0),
+                'total_value': float(ownership.total_value_usd or 0)
+            }
+            relationships_data.append(relationship_data)
+        
+        # Convert nodes_by_level to a list for template use
+        levels_list = []
+        for level in sorted(nodes_by_level.keys()):
+            levels_list.append({
+                'level': level,
+                'nodes': nodes_by_level[level]
+            })
+        
+        return {
+            'nodes': nodes_data,
+            'relationships': relationships_data,
+            'levels': sorted(nodes_by_level.keys()),
+            'levels_list': levels_list
+        }
+
+
+def structure_json_api(request, structure_id):
+    """
+    JSON API endpoint for structure data
+    """
+    structure = get_object_or_404(Structure, id=structure_id)
+    view = StructureVisualizationView()
+    structure_data = view.get_structure_data(structure)
+    
+    return JsonResponse({
+        'structure': {
+            'id': structure.id,
+            'name': structure.name,
+            'description': structure.description,
+            'status': structure.status
+        },
+        'data': structure_data
+    })
 

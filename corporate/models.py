@@ -2,7 +2,6 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
-from datetime import timedelta
 
 
 class Entity(models.Model):
@@ -147,18 +146,15 @@ class Entity(models.Model):
         help_text="Tax classification for this entity",
     )
 
-    # Template Management (moved to Implementation subsection)
-    implementation_templates = models.TextField(
+    # Implementation Documents (new field to replace scattered document references)
+    implementation_documents = models.JSONField(
+        default=dict,
         blank=True,
-        help_text="Implementation templates (text format, not JSON)"
+        help_text="JSON field storing document templates (Operating Agreement, Memorandum, etc.)"
     )
 
-    # Shares Information
-    total_shares = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Total number of shares for this entity"
-    )
+    # Shares Information (removed from here - will be instance-specific in StructureNode)
+    # total_shares field removed - this is now instance-specific
 
     # Jurisdiction Information
     jurisdiction = models.CharField(
@@ -194,17 +190,18 @@ class Entity(models.Model):
         default=3,
     )
 
-    # Tax Impact Information
-    tax_impact_usa = models.TextField(
-        help_text="Detailed tax implications in the United States",
+    # Tax Impact Information (simplified to single jurisdiction)
+    tax_impact_local = models.TextField(
+        help_text="Tax implications in the entity's jurisdiction",
         default="To be determined",
     )
     tax_impact_brazil = models.TextField(
-        help_text="Detailed tax implications in Brazil",
+        help_text="Tax implications in Brazil (if applicable)",
         default="To be determined",
     )
-    tax_impact_others = models.TextField(
-        blank=True, help_text="Tax implications in other jurisdictions"
+    tax_impact_usa = models.TextField(
+        help_text="Tax implications in USA (if applicable)", 
+        default="To be determined",
     )
 
     # Privacy and Asset Protection
@@ -223,49 +220,23 @@ class Entity(models.Model):
         default="Standard privacy protections apply",
     )
 
-    # Privacy Score (0-3) replaces privacy_score (0-100)
-    privacy_score = models.IntegerField(
-        choices=[(i, f"Level {i}") for i in range(0, 4)],
-        help_text="Privacy score from 0 (lowest) to 3 (highest)",
-        default=1,
-    )
-
-    # Banking Relation Score (1-3)
-    banking_relation_score = models.IntegerField(
-        choices=[(i, f"Level {i}") for i in range(1, 4)],
-        help_text="Banking relationship difficulty from 1 (easy) to 3 (difficult)",
-        default=2,
-    )
-    compliance_score = models.IntegerField(
-        validators=[MinValueValidator(0), MaxValueValidator(100)],
-        help_text="Compliance score from 0 to 100",
-        blank=True,
-        null=True,
-    )
-
-    # Operational Information
+    # Banking Information (simplified)
     banking_facility = models.IntegerField(
         choices=[(i, f"Level {i}") for i in range(1, 6)],
         help_text="Banking facility level from 1 (difficult) to 5 (very easy)",
         default=3,
     )
-    required_documentation = models.TextField(
-        help_text="Required documentation for setup",
+
+    # Required Documentation (simplified)
+    required_documents = models.TextField(
+        help_text="Required documents for setup (Passport, Proof of address, etc.)",
         default="Standard documentation required",
     )
 
-    # Document URLs
-    documents_url = models.URLField(
-        blank=True, help_text="URL for entity documents and templates"
-    )
-
-    # Compliance and Reporting
-    required_forms_usa = models.TextField(
-        blank=True, help_text="Required US forms and reporting obligations"
-    )
-    required_forms_brazil = models.TextField(
-        blank=True,
-        help_text="Required Brazilian forms and reporting obligations",
+    # Legal Requirements (renamed from required_forms)
+    legal_requirements = models.TextField(
+        blank=True, 
+        help_text="Legal obligations, form submissions, and compliance requirements in the entity's jurisdiction"
     )
 
     # Status and Metadata
@@ -290,9 +261,7 @@ class Entity(models.Model):
         return f"{self.name} ({self.get_entity_type_display()})"
 
     def save(self, *args, **kwargs):
-        """Auto-calculate privacy score from confidentiality_level if not set"""
-        if self.confidentiality_level and not self.privacy_score:
-            self.privacy_score = min(3, (self.confidentiality_level - 1))
+        """Save method without removed fields"""
         super().save(*args, **kwargs)
 
     def clean(self):
@@ -344,38 +313,12 @@ class Entity(models.Model):
         return "Not set"
 
     def get_templates_list(self):
-        """Return formatted list of templates"""
-        if not self.implementation_templates:
+        """Return formatted list of implementation documents"""
+        if not self.implementation_documents:
             return []
         return [
-            f"{template.get('name', 'Unknown')} ({template.get('url', 'No URL')})"
-            for template in self.implementation_templates
+            f"{key}: {value}" for key, value in self.implementation_documents.items()
         ]
-
-    def get_privacy_score_display(self):
-        """Get privacy score display"""
-        score_map = {
-            0: "Lowest Privacy",
-            1: "Low Privacy",
-            2: "Medium Privacy",
-            3: "High Privacy",
-        }
-        return score_map.get(self.privacy_score, "Unknown")
-
-    def get_banking_relation_display(self):
-        """Get banking relation difficulty display"""
-        score_map = {
-            1: "Easy Banking",
-            2: "Moderate Banking",
-            3: "Difficult Banking",
-        }
-        return score_map.get(self.banking_relation_score, "Unknown")
-
-    def get_compliance_level_display(self):
-        """Get compliance level as percentage"""
-        if self.compliance_score:
-            return f"{self.compliance_score}%"
-        return "Not set"
 
 
 class Structure(models.Model):
@@ -1321,4 +1264,232 @@ class StructureOwnership(models.Model):
         # Validar que parent não é o mesmo que child
         if self.parent == self.child:
             raise ValidationError("Entity cannot own itself")
+
+
+class StructureNode(models.Model):
+    """
+    Represents an instance of an Entity within a specific Structure.
+    This allows the same Entity template to be reused across multiple structures
+    with different customizations (shares, corporate names, etc.)
+    """
+    
+    # Core relationships
+    structure = models.ForeignKey(
+        'Structure', 
+        on_delete=models.CASCADE, 
+        related_name='nodes'
+    )
+    entity_template = models.ForeignKey(
+        Entity, 
+        on_delete=models.CASCADE,
+        help_text="The entity template this node is based on"
+    )
+    
+    # Instance-specific customizations
+    custom_name = models.CharField(
+        max_length=200, 
+        help_text="Custom name for this entity instance (e.g. 'João's Wyoming LLC')"
+    )
+    total_shares = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Number of shares for this specific instance"
+    )
+    
+    # Corporate identity for this instance
+    corporate_name = models.CharField(
+        max_length=200, 
+        blank=True,
+        help_text="Corporate name when entity is used in this structure"
+    )
+    hash_number = models.CharField(
+        max_length=50, 
+        blank=True,
+        help_text="Hash number when entity is used in this structure"
+    )
+    
+    # Hierarchy within structure
+    level = models.PositiveIntegerField(
+        default=1,
+        help_text="Level in the structure hierarchy (1 = top level)"
+    )
+    parent_node = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='child_nodes',
+        help_text="Parent node in the structure hierarchy"
+    )
+    
+    # Status
+    is_active = models.BooleanField(default=True)
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Structure Node"
+        verbose_name_plural = "Structure Nodes"
+        unique_together = ['structure', 'custom_name']
+        indexes = [
+            models.Index(fields=['structure', 'level']),
+            models.Index(fields=['entity_template']),
+            models.Index(fields=['parent_node']),
+        ]
+    
+    def __str__(self):
+        return f"{self.custom_name} ({self.entity_template.name}) - Level {self.level}"
+    
+    def get_full_hierarchy_path(self):
+        """Returns the full path from root to this node"""
+        path = [self.custom_name]
+        current = self.parent_node
+        while current:
+            path.insert(0, current.custom_name)
+            current = current.parent_node
+        return " → ".join(path)
+    
+    def get_children(self):
+        """Returns direct children of this node"""
+        return self.child_nodes.filter(is_active=True).order_by('custom_name')
+    
+    def get_total_ownership_percentage(self):
+        """Calculate total ownership percentage distributed from this node"""
+        return self.owned_ownerships.aggregate(
+            total=models.Sum('ownership_percentage')
+        )['total'] or 0
+
+    def clean(self):
+        """Validate node constraints"""
+        super().clean()
+        
+        # Validate hierarchy (prevent circular references)
+        if self.parent_node:
+            current = self.parent_node
+            while current:
+                if current == self:
+                    raise ValidationError("Circular reference detected in structure hierarchy")
+                current = current.parent_node
+        
+        # Validate level consistency
+        if self.parent_node and self.level <= self.parent_node.level:
+            raise ValidationError("Child node level must be greater than parent level")
+
+
+class NodeOwnership(models.Model):
+    """
+    Represents ownership relationships between nodes in a structure.
+    Replaces EntityOwnership for the new node-based system.
+    """
+    
+    structure = models.ForeignKey(
+        'Structure', 
+        on_delete=models.CASCADE, 
+        related_name='node_ownerships'
+    )
+    
+    # Owner can be either a Party (UBO) or another StructureNode
+    owner_party = models.ForeignKey(
+        'parties.Party', 
+        null=True, 
+        blank=True, 
+        on_delete=models.CASCADE,
+        related_name='owned_nodes',
+        help_text="Party (UBO) owner"
+    )
+    owner_node = models.ForeignKey(
+        StructureNode, 
+        null=True, 
+        blank=True, 
+        on_delete=models.CASCADE, 
+        related_name='owned_ownerships',
+        help_text="Structure node owner"
+    )
+    
+    # Owned node
+    owned_node = models.ForeignKey(
+        StructureNode, 
+        on_delete=models.CASCADE, 
+        related_name='ownership_received'
+    )
+    
+    # Ownership details
+    ownership_percentage = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2,
+        validators=[MinValueValidator(0.01), MaxValueValidator(100.00)],
+        help_text="Ownership percentage (0.01 to 100.00)"
+    )
+    
+    owned_shares = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Number of shares owned"
+    )
+    
+    # Share valuation
+    share_value_usd = models.DecimalField(
+        max_digits=15, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        validators=[MinValueValidator(0.01)],
+        help_text="Value per share in USD"
+    )
+    
+    # Calculated total value
+    total_value_usd = models.DecimalField(
+        max_digits=20, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        help_text="Total value of owned shares in USD"
+    )
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Node Ownership"
+        verbose_name_plural = "Node Ownerships"
+        unique_together = ['structure', 'owner_party', 'owner_node', 'owned_node']
+        indexes = [
+            models.Index(fields=['structure']),
+            models.Index(fields=['owner_party']),
+            models.Index(fields=['owner_node']),
+            models.Index(fields=['owned_node']),
+        ]
+    
+    def __str__(self):
+        owner_name = self.owner_party.name if self.owner_party else self.owner_node.custom_name
+        return f"{owner_name} → {self.owned_node.custom_name} ({self.ownership_percentage}%)"
+    
+    def clean(self):
+        """Validate ownership constraints"""
+        super().clean()
+        
+        # Must have exactly one owner (party or node)
+        if not self.owner_party and not self.owner_node:
+            raise ValidationError("Must specify either owner_party or owner_node")
+        
+        if self.owner_party and self.owner_node:
+            raise ValidationError("Cannot specify both owner_party and owner_node")
+        
+        # Prevent self-ownership for nodes
+        if self.owner_node and self.owner_node == self.owned_node:
+            raise ValidationError("Node cannot own itself")
+        
+        # Validate shares consistency
+        if self.owned_shares and self.owned_node.total_shares:
+            if self.owned_shares > self.owned_node.total_shares:
+                raise ValidationError("Owned shares cannot exceed total shares")
+    
+    def save(self, *args, **kwargs):
+        """Auto-calculate total value if possible"""
+        if self.owned_shares and self.share_value_usd:
+            self.total_value_usd = self.owned_shares * self.share_value_usd
+        super().save(*args, **kwargs)
 
