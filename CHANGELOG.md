@@ -5,19 +5,70 @@ All notable changes to the SIRIUS project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-01-09
+
+### Added
+- Complete repository organization and documentation overhaul
+- New comprehensive documentation structure:
+  - DEVELOPMENT_GUIDE.md - Complete development setup and patterns
+  - DEPLOYMENT_GUIDE.md - Production deployment instructions
+  - API_REFERENCE.md - Complete Django models documentation
+- Enhanced Django Admin interface with custom styling
+- Improved security configurations with environment variables
+
+### Changed
+- **BREAKING**: Migrated from frontend-based to Django Admin-only interface
+- Updated README.md to reflect current Django-focused architecture
+- Simplified project structure removing unnecessary frontend components
+- Consolidated documentation from 12 to 7 focused files
+- Updated all documentation to reflect Django Admin as primary interface
+
+### Removed
+- Frontend Vue.js components and related files
+- Legacy documentation mentioning drag-and-drop interface
+- Redundant and outdated documentation files:
+  - ESPECIFICACOES_TECNICAS.md
+  - USER_MANUAL.md  
+  - TECHNICAL_DOCUMENTATION.md
+  - MIGRATION_GUIDE.md
+  - RELATORIO_FINAL_CONFORMIDADE.md
+  - PLANO_MELHORIAS_SIRIUS.md
+- Legacy code files:
+  - sales/models_old.py
+  - test_conformidade_100.py
+  - test_refactoring.py
+
+### Fixed
+- Sales app admin interface cleaned from legacy references
+- Financial Department app crash issues resolved
+- All Django migrations properly applied
+
+## [1.5.0] - 2025-01-08
+
+### Added
+- Complete SIRIUS MELHORIAS P2 implementation with 100% conformance
+- Corporate app refactoring with Entity/Structure models
+- Financial Department app for price and cost management
+- Parties app for UBO and beneficiary management
+- Enhanced validation rules with tax impact calculations
+- Automatic share value calculations (USD/EUR)
+
+### Changed
+- Structure model with status colors and validation
+- Entity ownership with percentage and share values
+- Improved admin interfaces across all apps
+
 ## [1.0.0] - 2025-07-05
 
 ### Added
 - Initial release of SIRIUS - Strategic Intelligence Relationship & Interactive Universal System
-- Interactive drag-and-drop canvas for legal structure design
-- 7 comprehensive legal structures:
-  - Bahamas DAO SAC
-  - BTS Vault
-  - Fund Token as a Service
-  - Nacionalização (CNPJ Brasil)
-  - Wyoming Corporation
-  - Wyoming DAO LLC
-  - Wyoming Statutory Foundation
+- Django-based backend architecture
+- 5 main Django apps: corporate, sales, corporate_relationship, financial_department, parties
+- Comprehensive corporate structure management
+- Entity and structure relationship modeling
+- Partner and contact management
+- Financial pricing and cost tracking
+- Party roles and beneficiary relations
 - Real-time cost calculation with 3 pricing scenarios (Basic, Complete, Premium)
 - Advanced validation engine with compliance checking
 - Professional PDF report generation with executive summaries
