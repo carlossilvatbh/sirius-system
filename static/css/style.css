@@ -1,31 +1,63 @@
-/* SIRIUS Custom Styles - Enhanced UX/UI */
+/* SIRIUS Custom Styles - Apple Design System */
 
-/* Responsive Design Variables */
+/* Apple Design System Variables */
 :root {
-    --sirius-primary: #2563eb;
-    --sirius-secondary: #1e40af;
-    --sirius-accent: #3b82f6;
-    --sirius-success: #10b981;
-    --sirius-warning: #f59e0b;
-    --sirius-error: #ef4444;
-    --sirius-gray-50: #f8fafc;
-    --sirius-gray-100: #f1f5f9;
-    --sirius-gray-200: #e2e8f0;
-    --sirius-gray-300: #cbd5e1;
-    --sirius-gray-400: #94a3b8;
-    --sirius-gray-500: #64748b;
-    --sirius-gray-600: #475569;
-    --sirius-gray-700: #334155;
-    --sirius-gray-800: #1e293b;
-    --sirius-gray-900: #0f172a;
+    /* Apple System Colors - Official from HIG */
+    --apple-blue: #007AFF;
+    --apple-blue-dark: #0051D5;
+    --apple-blue-light: #40A2FF;
+    
+    /* Apple Grays - Official system */
+    --apple-gray-1: #F2F2F7;
+    --apple-gray-2: #E5E5EA;
+    --apple-gray-3: #D1D1D6;
+    --apple-gray-4: #C7C7CC;
+    --apple-gray-5: #AEAEB2;
+    --apple-gray-6: #8E8E93;
+    
+    /* Apple Semantic Colors */
+    --apple-green: #34C759;
+    --apple-green-dark: #30A14E;
+    --apple-red: #FF3B30;
+    --apple-red-dark: #D70015;
+    --apple-orange: #FF9500;
+    --apple-orange-dark: #FF8800;
+    --apple-yellow: #FFCC00;
+    --apple-purple: #AF52DE;
+    --apple-purple-dark: #8E44AD;
+    --apple-pink: #FF2D92;
+    --apple-teal: #5AC8FA;
+    --apple-indigo: #5856D6;
+
+    /* Apple Neutral System */
+    --apple-label: #000000;
+    --apple-label-secondary: #3C3C43;
+    --apple-label-tertiary: #3C3C4399;
+    --apple-label-quaternary: #3C3C432E;
+    
+    /* Apple Backgrounds */
+    --apple-system-background: #FFFFFF;
+    --apple-secondary-background: #F2F2F7;
+    --apple-tertiary-background: #FFFFFF;
+    
+    /* Apple Grouped Backgrounds */
+    --apple-grouped-background: #F2F2F7;
+    --apple-grouped-secondary: #FFFFFF;
+    --apple-grouped-tertiary: #F2F2F7;
+
+    /* Layout Variables */
     --sidebar-width: 320px;
     --sidebar-width-mobile: 280px;
     --border-radius: 12px;
     --border-radius-lg: 16px;
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    
+    /* Apple Shadows */
+    --apple-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --apple-shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.15);
+    --apple-shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --apple-shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.12);
+    
+    /* Apple Transitions */
     --transition-fast: 0.15s ease-out;
     --transition-normal: 0.3s ease-out;
     --transition-slow: 0.5s ease-out;
@@ -44,16 +76,16 @@
     }
 }
 
-/* Canvas and Drag-Drop Styles - Enhanced */
+/* Canvas and Drag-Drop Styles - Apple Design */
 .vue-flow__container {
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    background: linear-gradient(135deg, var(--apple-grouped-background) 0%, var(--apple-gray-1) 100%);
     border-radius: var(--border-radius);
-    border: 2px dashed var(--sirius-gray-200);
+    border: 2px dashed var(--apple-gray-3);
     transition: all var(--transition-normal);
 }
 
 .vue-flow__container:hover {
-    border-color: var(--sirius-accent);
+    border-color: var(--apple-blue);
     background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
 }
 
@@ -68,27 +100,27 @@
 .vue-flow__node:hover {
     box-shadow: var(--shadow-xl);
     transform: translateY(-4px) scale(1.02);
-    border-color: var(--sirius-accent);
+    border-color: var(--apple-blue);
 }
 
 .vue-flow__node.selected {
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3);
-    border-color: var(--sirius-primary);
+    border-color: var(--apple-blue-dark);
 }
 
 .vue-flow__edge {
     stroke-width: 2;
-    stroke: var(--sirius-gray-400);
+    stroke: var(--apple-gray-5);
     transition: all var(--transition-normal);
 }
 
 .vue-flow__edge:hover {
-    stroke: var(--sirius-accent);
+    stroke: var(--apple-blue);
     stroke-width: 3;
 }
 
 .vue-flow__edge.selected {
-    stroke: var(--sirius-primary);
+    stroke: var(--apple-blue-dark);
     stroke-width: 3;
     filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.4));
 }
@@ -105,12 +137,12 @@
 }
 
 .canvas-element.connection-source {
-    border: 2px solid var(--sirius-primary);
+    border: 2px solid var(--apple-blue-dark);
     box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
 }
 
 .canvas-element.connection-target {
-    border: 2px solid var(--sirius-success);
+    border: 2px solid var(--apple-green);
     box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
 }
 
@@ -121,7 +153,7 @@
 
 .connection-path:hover {
     stroke-width: 3;
-    stroke: var(--sirius-accent);
+    stroke: var(--apple-blue);
 }
 
 .connection-label {
@@ -150,7 +182,7 @@
     top: 20px;
     right: 20px;
     background: rgba(59, 130, 246, 0.1);
-    color: var(--sirius-primary);
+    color: var(--apple-blue-dark);
     padding: 8px 16px;
     border-radius: var(--border-radius);
     font-size: 0.875rem;
@@ -167,7 +199,7 @@
 /* Structure Cards - Enhanced Responsive Design */
 .structure-card {
     background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    border: 1px solid var(--sirius-gray-200);
+    border: 1px solid var(--apple-gray-3);
     border-radius: var(--border-radius);
     padding: 20px;
     margin: 12px 0;
@@ -186,7 +218,7 @@
     left: 0;
     right: 0;
     height: 4px;
-    background: linear-gradient(90deg, var(--sirius-primary), #8b5cf6);
+    background: linear-gradient(90deg, var(--apple-blue-dark), var(--apple-purple));
     opacity: 0;
     transition: opacity var(--transition-normal);
 }
@@ -212,7 +244,7 @@
 .structure-card:hover {
     transform: translateY(-6px) scale(1.02);
     box-shadow: var(--shadow-xl);
-    border-color: var(--sirius-accent);
+    border-color: var(--apple-blue);
     background: linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%);
 }
 
@@ -226,10 +258,10 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.8px;
-    color: var(--sirius-gray-500);
+    color: var(--apple-label-secondary);
     margin-bottom: 8px;
     padding: 4px 8px;
-    background: var(--sirius-gray-100);
+    background: var(--apple-gray-1);
     border-radius: 6px;
     display: inline-block;
 }
@@ -237,7 +269,7 @@
 .structure-card .structure-name {
     font-size: 16px;
     font-weight: 700;
-    color: var(--sirius-gray-900);
+    color: var(--apple-label);
     margin: 12px 0 8px 0;
     line-height: 1.3;
 }
@@ -245,7 +277,7 @@
 .structure-card .structure-cost {
     font-size: 18px;
     font-weight: 700;
-    color: var(--sirius-success);
+    color: var(--apple-green);
     margin: 8px 0;
 }
 
@@ -255,7 +287,7 @@
     justify-content: space-between;
     margin-top: 12px;
     font-size: 12px;
-    color: var(--sirius-gray-500);
+    color: var(--apple-label-secondary);
 }
 
 .structure-card .complexity-indicator {
@@ -311,7 +343,7 @@
     left: 0;
     right: 0;
     height: 2px;
-    background: linear-gradient(90deg, var(--sirius-primary), #8b5cf6);
+    background: linear-gradient(90deg, var(--apple-blue-dark), var(--apple-purple));
 }
 
 .info-panel:hover {
@@ -322,7 +354,7 @@
 .info-panel h3 {
     font-size: 20px;
     font-weight: 800;
-    color: var(--sirius-gray-900);
+    color: var(--apple-label);
     margin-bottom: 20px;
     display: flex;
     align-items: center;
@@ -331,7 +363,7 @@
 
 .info-panel h3 i {
     font-size: 18px;
-    color: var(--sirius-primary);
+    color: var(--apple-blue-dark);
 }
 
 .info-panel .metric {
@@ -339,7 +371,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 16px 0;
-    border-bottom: 1px solid var(--sirius-gray-100);
+    border-bottom: 1px solid var(--apple-gray-1);
     transition: all var(--transition-fast);
 }
 
@@ -363,11 +395,11 @@
 .info-panel .metric-value {
     font-size: 16px;
     font-weight: 700;
-    color: var(--sirius-gray-900);
+    color: var(--apple-label);
 }
 
 .info-panel .metric-value.success {
-    color: var(--sirius-success);
+    color: var(--apple-green);
 }
 
 .info-panel .metric-value.warning {
@@ -438,7 +470,7 @@
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, var(--sirius-primary), var(--sirius-secondary));
+    background: linear-gradient(135deg, var(--apple-blue-dark), var(--sirius-secondary));
     color: white;
     box-shadow: var(--shadow-md);
 }
@@ -446,7 +478,7 @@
 .btn-primary:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
-    background: linear-gradient(135deg, var(--sirius-secondary), var(--sirius-primary));
+    background: linear-gradient(135deg, var(--sirius-secondary), var(--apple-blue-dark));
 }
 
 .btn-primary:active {
@@ -456,7 +488,7 @@
 .btn-secondary {
     background: white;
     color: var(--sirius-gray-700);
-    border: 1px solid var(--sirius-gray-200);
+    border: 1px solid var(--apple-gray-3);
     box-shadow: var(--shadow-sm);
 }
 
@@ -468,7 +500,7 @@
 }
 
 .btn-success {
-    background: linear-gradient(135deg, var(--sirius-success), #059669);
+    background: linear-gradient(135deg, var(--apple-green), #059669);
     color: white;
     box-shadow: var(--shadow-md);
 }
@@ -507,7 +539,7 @@
 .sidebar {
     width: var(--sidebar-width);
     background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    border-right: 1px solid var(--sirius-gray-200);
+    border-right: 1px solid var(--apple-gray-3);
     box-shadow: var(--shadow-lg);
     overflow-y: auto;
     transition: all var(--transition-normal);
@@ -521,12 +553,12 @@
     right: 0;
     width: 1px;
     height: 100%;
-    background: linear-gradient(to bottom, transparent, var(--sirius-gray-200), transparent);
+    background: linear-gradient(to bottom, transparent, var(--apple-gray-3), transparent);
 }
 
 .sidebar-header {
     padding: 32px 24px 24px;
-    border-bottom: 1px solid var(--sirius-gray-100);
+    border-bottom: 1px solid var(--apple-gray-1);
     background: linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%);
     position: relative;
 }
@@ -538,13 +570,13 @@
     left: 0;
     right: 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, var(--sirius-gray-200), transparent);
+    background: linear-gradient(90deg, transparent, var(--apple-gray-3), transparent);
 }
 
 .sidebar-header h2 {
     font-size: 20px;
     font-weight: 800;
-    color: var(--sirius-gray-900);
+    color: var(--apple-label);
     margin-bottom: 8px;
     display: flex;
     align-items: center;
@@ -552,7 +584,7 @@
 }
 
 .sidebar-header h2 i {
-    color: var(--sirius-primary);
+    color: var(--apple-blue-dark);
 }
 
 .sidebar-header p {
@@ -590,7 +622,7 @@
 /* Search and Filters - Enhanced */
 .search-filters {
     padding: 20px;
-    border-bottom: 1px solid var(--sirius-gray-100);
+    border-bottom: 1px solid var(--apple-gray-1);
     background: var(--sirius-gray-50);
 }
 
@@ -602,7 +634,7 @@
 .search-input {
     width: 100%;
     padding: 12px 16px 12px 44px;
-    border: 1px solid var(--sirius-gray-200);
+    border: 1px solid var(--apple-gray-3);
     border-radius: var(--border-radius);
     font-size: 14px;
     transition: all var(--transition-fast);
@@ -611,7 +643,7 @@
 
 .search-input:focus {
     outline: none;
-    border-color: var(--sirius-primary);
+    border-color: var(--apple-blue-dark);
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
     transform: translateY(-1px);
 }
@@ -621,14 +653,14 @@
     left: 16px;
     top: 50%;
     transform: translateY(-50%);
-    color: var(--sirius-gray-400);
+    color: var(--apple-gray-5);
     font-size: 14px;
 }
 
 .filter-select {
     width: 100%;
     padding: 12px 16px;
-    border: 1px solid var(--sirius-gray-200);
+    border: 1px solid var(--apple-gray-3);
     border-radius: var(--border-radius);
     font-size: 14px;
     background: white;
@@ -637,7 +669,7 @@
 
 .filter-select:focus {
     outline: none;
-    border-color: var(--sirius-primary);
+    border-color: var(--apple-blue-dark);
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
@@ -652,7 +684,7 @@
 .canvas-element {
     position: absolute;
     background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    border: 2px solid var(--sirius-gray-200);
+    border: 2px solid var(--apple-gray-3);
     border-radius: var(--border-radius);
     padding: 20px;
     cursor: move;
@@ -665,11 +697,11 @@
 .canvas-element:hover {
     transform: translateY(-2px) scale(1.02);
     box-shadow: var(--shadow-xl);
-    border-color: var(--sirius-accent);
+    border-color: var(--apple-blue);
 }
 
 .canvas-element.selected {
-    border-color: var(--sirius-primary);
+    border-color: var(--apple-blue-dark);
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
 }
 
@@ -700,7 +732,7 @@
 
 .empty-state p {
     font-size: 16px;
-    color: var(--sirius-gray-500);
+    color: var(--apple-label-secondary);
     margin: 0;
 }
 
@@ -743,8 +775,8 @@
 .loading-spinner {
     width: 48px;
     height: 48px;
-    border: 4px solid var(--sirius-gray-200);
-    border-top: 4px solid var(--sirius-primary);
+    border: 4px solid var(--apple-gray-3);
+    border-top: 4px solid var(--apple-blue-dark);
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -876,7 +908,7 @@
 }
 
 .validation-alert.success {
-    border-left-color: var(--sirius-success);
+    border-left-color: var(--apple-green);
     background: linear-gradient(135deg, #f0fdfa 0%, #ffffff 100%);
 }
 
@@ -891,7 +923,7 @@
 }
 
 .validation-alert.info {
-    border-left-color: var(--sirius-primary);
+    border-left-color: var(--apple-blue-dark);
     background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
 }
 
