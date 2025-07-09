@@ -423,15 +423,8 @@ class Structure(models.Model):
         return f"{self.name} ({self.get_status_display()})"
 
     def save(self, *args, **kwargs):
-        # Save first to get primary key
+        # Implement warning color for drafts in admin interface
         super().save(*args, **kwargs)
-        
-        # Update calculated fields after saving (when pk exists)
-        if self.pk:
-            self.update_calculated_fields()
-            # Save again only if calculated fields changed
-            if self.tax_impacts or self.severity_levels:
-                super().save(update_fields=['tax_impacts', 'severity_levels'])
         
         if self.status == 'SENT_FOR_APPROVAL':
             # Trigger notification to approvers
@@ -442,88 +435,14 @@ class Structure(models.Model):
         # TODO: Implement notification logic
         pass
 
-    def update_calculated_fields(self):
-        """Update tax_impacts and severity_levels from validation rules (FASE 5)"""
-        self.tax_impacts = self.combined_tax_impacts
-        self.severity_levels = ", ".join(self.combined_severities)
-
-    @property
-    def combined_tax_impacts(self):
-        """Return all tax impacts from validation rules based on entities in structure"""
-        impacts = []
-        entities = self.get_all_entities_in_structure()
-        
-        for i, entity1 in enumerate(entities):
-            for entity2 in entities[i+1:]:
-                rules = ValidationRule.objects.filter(
-                    models.Q(parent_entity=entity1, related_entity=entity2) |
-                    models.Q(parent_entity=entity2, related_entity=entity1)
-                )
-                for rule in rules:
-                    if rule.tax_impacts:
-                        impacts.append(rule.tax_impacts)
-        
-        return "; ".join(set(impacts)) if impacts else "No tax impacts identified"
-
-    @property
-    def combined_severities(self):
-        """Return all severities from validation rules"""
-        severities = []
-        entities = self.get_all_entities_in_structure()
-        
-        for i, entity1 in enumerate(entities):
-            for entity2 in entities[i+1:]:
-                rules = ValidationRule.objects.filter(
-                    models.Q(parent_entity=entity1, related_entity=entity2) |
-                    models.Q(parent_entity=entity2, related_entity=entity1)
-                )
-                severities.extend([rule.severity for rule in rules if rule.severity])
-        
-        return list(set(severities))
-
-    def get_all_entities_in_structure(self):
-        """Get all entities involved in this structure"""
-        entities = []
-        for ownership in self.entity_ownerships.all():
-            if ownership.owned_entity not in entities:
-                entities.append(ownership.owned_entity)
-            if ownership.owner_entity and ownership.owner_entity not in entities:
-                entities.append(ownership.owner_entity)
-        return entities
-
-    def validate_entity_combinations(self):
-        """Validate that no prohibited combinations exist in structure (FASE 6)"""
-        entities = self.get_all_entities_in_structure()
-        
-        for i, entity1 in enumerate(entities):
-            for entity2 in entities[i+1:]:
-                prohibited_rules = ValidationRule.objects.filter(
-                    models.Q(parent_entity=entity1, related_entity=entity2) |
-                    models.Q(parent_entity=entity2, related_entity=entity1),
-                    relationship_type='PROHIBITED'
-                )
-                
-                if prohibited_rules.exists():
-                    rule = prohibited_rules.first()
-                    raise ValidationError(
-                        f"Prohibited combination: {entity1.name} and {entity2.name}. "
-                        f"Reason: {rule.description}"
-                    )
-
-    def clean(self):
-        super().clean()
-        if self.pk:  # Only validate if structure already exists
-            self.validate_entity_combinations()
-
 
 class EntityOwnership(models.Model):
     """
     Manages ownership relationships within a Structure
     Handles both UBO → Entity and Entity → Entity ownership
-    Enhanced with Corporate Name, Hash Number, and Share Values
     """
 
-    structure = models.ForeignKey(Structure, on_delete=models.CASCADE, related_name='entity_ownerships')
+    structure = models.ForeignKey(Structure, on_delete=models.CASCADE)
 
     # Owner can be either UBO or Entity
     owner_ubo = models.ForeignKey(
@@ -538,7 +457,7 @@ class EntityOwnership(models.Model):
         null=True, 
         blank=True, 
         on_delete=models.CASCADE, 
-        related_name='ownerships_as_owner',
+        related_name='owned_entities',
         help_text="Entity owner"
     )
 
@@ -546,72 +465,37 @@ class EntityOwnership(models.Model):
     owned_entity = models.ForeignKey(
         Entity, 
         on_delete=models.CASCADE, 
-        related_name='ownerships_as_owned'
-    )
-
-    # Corporate identification (FASE 2)
-    corporate_name = models.CharField(
-        max_length=200, 
-        blank=True,
-        help_text="Corporate name when entity is used in structure"
-    )
-    hash_number = models.CharField(
-        max_length=50, 
-        blank=True,
-        help_text="Hash number when entity is used in structure"
+        related_name='ownership_records'
     )
 
     # Share management
-    owned_shares = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Number of shares owned by this owner"
-    )
+    total_shares = models.PositiveIntegerField(help_text="Total shares of the owned entity")
+    owned_shares = models.PositiveIntegerField(help_text="Shares owned by this owner")
     ownership_percentage = models.DecimalField(
         max_digits=5, 
         decimal_places=2,
-        null=True,
-        blank=True,
-        help_text="Ownership percentage"
+        help_text="Ownership percentage (auto-calculated)"
     )
 
-    # Share valuation (FASE 3)
+    # Share valuation (optional)
     share_value_usd = models.DecimalField(
         max_digits=15, 
         decimal_places=2, 
         null=True, 
         blank=True,
-        validators=[MinValueValidator(0.01)],
-        help_text="Value per share in USD"
+        validators=[MinValueValidator(0.01)]
     )
     share_value_eur = models.DecimalField(
         max_digits=15, 
         decimal_places=2, 
         null=True, 
         blank=True,
-        validators=[MinValueValidator(0.01)],
-        help_text="Value per share in EUR"
+        validators=[MinValueValidator(0.01)]
     )
 
-    # Total values (calculated fields)
-    total_value_usd = models.DecimalField(
-        max_digits=20, 
-        decimal_places=2, 
-        null=True, 
-        blank=True,
-        help_text="Total value of owned shares in USD"
-    )
-    total_value_eur = models.DecimalField(
-        max_digits=20, 
-        decimal_places=2, 
-        null=True, 
-        blank=True,
-        help_text="Total value of owned shares in EUR"
-    )
-
-    # Metadata
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    # Corporate identification
+    corporate_name = models.CharField(max_length=200, blank=True)
+    hash_number = models.CharField(max_length=100, blank=True)
 
     class Meta:
         verbose_name = "Entity Ownership"
@@ -620,8 +504,6 @@ class EntityOwnership(models.Model):
         indexes = [
             models.Index(fields=["structure"]),
             models.Index(fields=["owned_entity"]),
-            models.Index(fields=["owner_ubo"]),
-            models.Index(fields=["owner_entity"]),
         ]
 
     def __str__(self):
@@ -631,68 +513,39 @@ class EntityOwnership(models.Model):
         elif self.owner_entity:
             owner_name = str(self.owner_entity)
         
-        percentage = self.ownership_percentage or 0
-        return f"{owner_name} owns {percentage}% of {self.owned_entity.name}"
+        return f"{owner_name} owns {self.ownership_percentage}% of {self.owned_entity.name}"
 
     def clean(self):
-        super().clean()
         # Validate that exactly one owner type is specified
-        owner_count = sum([bool(self.owner_ubo), bool(self.owner_entity)])
-        if owner_count != 1:
+        if not (bool(self.owner_ubo) ^ bool(self.owner_entity)):
             raise ValidationError("Must specify exactly one owner (UBO or Entity)")
 
-        # Validate Corporate Name or Hash Number when entity is used in structure
-        if not self.corporate_name and not self.hash_number:
-            raise ValidationError(
-                "Entity in structure must have Corporate Name, Hash Number, or both"
-            )
-
-        # Validate share distribution
-        if self.owned_entity.total_shares:
-            self.validate_shares_distribution()
+        # Validate share distribution totals 100%
+        self.validate_share_distribution()
 
     def save(self, *args, **kwargs):
-        # Auto-calculate percentage from shares (FASE 4)
-        if self.owned_shares and self.owned_entity.total_shares:
-            calculated_percentage = (self.owned_shares / self.owned_entity.total_shares) * 100
-            if not self.ownership_percentage:
-                self.ownership_percentage = calculated_percentage
+        # Auto-calculate percentage from shares
+        if self.owned_shares and self.total_shares:
+            self.ownership_percentage = (self.owned_shares / self.total_shares) * 100
 
-        # Auto-calculate shares from percentage (FASE 4)
-        elif self.ownership_percentage and self.owned_entity.total_shares:
-            calculated_shares = int((self.ownership_percentage / 100) * self.owned_entity.total_shares)
-            if not self.owned_shares:
-                self.owned_shares = calculated_shares
-
-        # Calculate total values (FASE 3)
-        self.calculate_total_values()
+        # Auto-calculate shares from percentage
+        elif self.ownership_percentage and self.total_shares:
+            self.owned_shares = int((self.ownership_percentage / 100) * self.total_shares)
 
         super().save(*args, **kwargs)
 
-    def calculate_total_values(self):
-        """Calculate total values based on shares and share values"""
-        if self.share_value_usd and self.owned_shares:
-            self.total_value_usd = self.owned_shares * self.share_value_usd
-        if self.share_value_eur and self.owned_shares:
-            self.total_value_eur = self.owned_shares * self.share_value_eur
-
-    def validate_shares_distribution(self):
-        """Validate that all shares have owners (FASE 4)"""
-        total_owned = EntityOwnership.objects.filter(
+    def validate_share_distribution(self):
+        """Ensure total ownership equals 100%"""
+        total_ownership = EntityOwnership.objects.filter(
             structure=self.structure,
             owned_entity=self.owned_entity
         ).exclude(pk=self.pk).aggregate(
-            total=models.Sum('owned_shares')
+            total=models.Sum('ownership_percentage')
         )['total'] or 0
 
-        if self.owned_shares:
-            total_owned += self.owned_shares
+        if total_ownership + self.ownership_percentage > 100:
+            raise ValidationError("Total ownership cannot exceed 100%")
 
-        if total_owned > self.owned_entity.total_shares:
-            raise ValidationError(
-                f"Total owned shares ({total_owned}) cannot exceed "
-                f"entity total shares ({self.owned_entity.total_shares})"
-            )
 
 class MasterEntity(models.Model):
     """

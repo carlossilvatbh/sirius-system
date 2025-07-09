@@ -7,20 +7,17 @@ from .models import (
 
 @admin.register(File)
 class FileAdmin(admin.ModelAdmin):
-    list_display = ['structure', 'approved_by', 'approval_date', 'created_at']
-    list_filter = ['approval_date', 'created_at']
-    search_fields = ['structure__name', 'approved_by__name', 'file_number']
-    readonly_fields = ['created_at', 'file_number']
+    list_display = ['structure', 'approved_by', 'approved_at', 'created_at']
+    list_filter = ['approved_at', 'created_at']
+    search_fields = ['structure__name', 'approved_by__name']
+    readonly_fields = ['created_at', 'approved_at']
 
     fieldsets = [
         ('Structure Information', {
             'fields': ['structure']
         }),
         ('Approval', {
-            'fields': ['approved_by', 'approval_date']
-        }),
-        ('File Details', {
-            'fields': ['file_number']
+            'fields': ['approved_by', 'approved_at']
         }),
         ('Metadata', {
             'fields': ['created_at'],
@@ -31,18 +28,18 @@ class FileAdmin(admin.ModelAdmin):
 
 @admin.register(RelationshipStructure)
 class RelationshipStructureAdmin(admin.ModelAdmin):
-    list_display = ['structure', 'client', 'status', 'created_at']
+    list_display = ['structure', 'status', 'created_at']
     list_filter = ['status', 'created_at']
-    search_fields = ['structure__name', 'client__party__name']
-    list_select_related = ['structure', 'client']
+    search_fields = ['structure__name']
+    list_select_related = ['structure']
     readonly_fields = ['created_at']
 
 
 class ServiceActivityInline(admin.TabularInline):
     model = ServiceActivity
     extra = 1
-    fields = ['activity_title', 'status', 'start_date', 'due_date']
-    ordering = ['start_date']
+    fields = ['order', 'name', 'status']
+    ordering = ['order']
 
 
 @admin.register(Service)
@@ -91,11 +88,11 @@ class ServiceAdmin(admin.ModelAdmin):
 
 @admin.register(ServiceActivity)
 class ServiceActivityAdmin(admin.ModelAdmin):
-    list_display = ['service', 'activity_title', 'status', 'start_date', 'due_date']
+    list_display = ['service', 'order', 'name', 'status', 'updated_at']
     list_filter = ['status', 'service']
-    search_fields = ['activity_title', 'service__name']
+    search_fields = ['name', 'service__name']
     list_select_related = ['service']
-    ordering = ['service', 'start_date']
+    ordering = ['service', 'order']
 
 
 @admin.register(WebhookLog)

@@ -1,39 +1,45 @@
 from django.contrib import admin
 from .models import (
-    File, RelationshipStructure, 
+    Client, Contact, RelationshipStructure, 
     Service, ServiceActivity, WebhookLog
 )
 
 
-@admin.register(File)
-class FileAdmin(admin.ModelAdmin):
-    list_display = ['structure', 'approved_by', 'approval_date', 'created_at']
-    list_filter = ['approval_date', 'created_at']
-    search_fields = ['structure__name', 'approved_by__name', 'file_number']
-    readonly_fields = ['created_at', 'file_number']
+class ContactInline(admin.TabularInline):
+    model = Contact
+    extra = 1
+    fields = ['name', 'role', 'phone', 'email']
 
-    fieldsets = [
-        ('Structure Information', {
-            'fields': ['structure']
-        }),
-        ('Approval', {
-            'fields': ['approved_by', 'approval_date']
-        }),
-        ('File Details', {
-            'fields': ['file_number']
-        }),
-        ('Metadata', {
-            'fields': ['created_at'],
-            'classes': ['collapse']
-        }),
-    ]
+
+@admin.register(Client)
+class ClientAdmin(admin.ModelAdmin):
+    list_display = ['company_name', 'created_at', 'contacts_count']
+    search_fields = ['company_name', 'address']
+    list_filter = ['created_at']
+    inlines = [ContactInline]
+    readonly_fields = ['created_at']
+
+    def contacts_count(self, obj):
+        return obj.contacts.count()
+    contacts_count.short_description = 'Contacts'
+
+
+@admin.register(Contact)
+class ContactAdmin(admin.ModelAdmin):
+    list_display = ['name', 'role', 'client', 'email', 'phone']
+    search_fields = ['name', 'email', 'client__company_name']
+    list_filter = ['role', 'client']
+    list_select_related = ['client']
 
 
 @admin.register(RelationshipStructure)
 class RelationshipStructureAdmin(admin.ModelAdmin):
     list_display = ['structure', 'client', 'status', 'created_at']
-    list_filter = ['status', 'created_at']
-    search_fields = ['structure__name', 'client__party__name']
+    list_filter = ['status', 'created_at', 'structure__tipo']
+    search_fields = [
+        'structure__nome', 
+        'client__company_name'
+    ]
     list_select_related = ['structure', 'client']
     readonly_fields = ['created_at']
 
@@ -41,8 +47,8 @@ class RelationshipStructureAdmin(admin.ModelAdmin):
 class ServiceActivityInline(admin.TabularInline):
     model = ServiceActivity
     extra = 1
-    fields = ['activity_title', 'status', 'start_date', 'due_date']
-    ordering = ['start_date']
+    fields = ['order', 'name', 'status']
+    ordering = ['order']
 
 
 @admin.register(Service)
@@ -91,11 +97,11 @@ class ServiceAdmin(admin.ModelAdmin):
 
 @admin.register(ServiceActivity)
 class ServiceActivityAdmin(admin.ModelAdmin):
-    list_display = ['service', 'activity_title', 'status', 'start_date', 'due_date']
+    list_display = ['service', 'order', 'name', 'status', 'updated_at']
     list_filter = ['status', 'service']
-    search_fields = ['activity_title', 'service__name']
+    search_fields = ['name', 'service__name']
     list_select_related = ['service']
-    ordering = ['service', 'start_date']
+    ordering = ['service', 'order']
 
 
 @admin.register(WebhookLog)
@@ -146,4 +152,3 @@ class WebhookLogAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         # WebhookLog é apenas para leitura - criado automaticamente
         return False
-

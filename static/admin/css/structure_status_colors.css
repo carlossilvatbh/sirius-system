@@ -1,0 +1,68 @@
+/* Structure Status Colors - FASE 8 */
+
+/* Drafting status - Yellow warning */
+.structure-drafting {
+    background-color: #fff3cd !important;
+    border-left: 4px solid #ffc107 !important;
+}
+
+.structure-drafting td {
+    background-color: #fff3cd !important;
+}
+
+/* Sent for Approval status - Blue info */
+.structure-sent-approval {
+    background-color: #d1ecf1 !important;
+    border-left: 4px solid #17a2b8 !important;
+}
+
+.structure-sent-approval td {
+    background-color: #d1ecf1 !important;
+}
+
+/* Approved status - Green success */
+.structure-approved {
+    background-color: #d4edda !important;
+    border-left: 4px solid #28a745 !important;
+}
+
+.structure-approved td {
+    background-color: #d4edda !important;
+}
+
+/* Status field styling */
+.field-status {
+    font-weight: bold;
+}
+
+/* Alert for drafting structures */
+.structure-drafting .field-status::after {
+    content: " ⚠️";
+    color: #856404;
+}
+
+/* Info icon for sent for approval */
+.structure-sent-approval .field-status::after {
+    content: " ℹ️";
+    color: #0c5460;
+}
+
+/* Success icon for approved */
+.structure-approved .field-status::after {
+    content: " ✅";
+    color: #155724;
+}
+
+/* Hover effects */
+.structure-drafting:hover {
+    background-color: #ffeaa7 !important;
+}
+
+.structure-sent-approval:hover {
+    background-color: #b8daff !important;
+}
+
+.structure-approved:hover {
+    background-color: #c3e6cb !important;
+}
+

@@ -1,158 +1,141 @@
 from django.contrib import admin
 from .models import (
-    Structure, UBO, ValidationRule,
-    JurisdictionAlert, Successor, StructureOwnership
+    Entity, Structure, EntityOwnership, ValidationRule
 )
 
 
+@admin.register(Entity)
+class EntityAdmin(admin.ModelAdmin):
+    list_display = [
+        'name', 'entity_type', 'jurisdiction', 'total_shares', 'active'
+    ]
+    list_filter = ['entity_type', 'jurisdiction', 'active', 'created_at']
+    search_fields = ['name', 'tax_classification']
+    fieldsets = [
+        ('Basic Information', {
+            'fields': ['name', 'entity_type', 'tax_classification']
+        }),
+        ('Jurisdiction', {
+            'fields': ['jurisdiction', 'us_state', 'br_state']
+        }),
+        ('Shares', {
+            'fields': ['total_shares']
+        }),
+        ('Implementation', {
+            'fields': ['implementation_templates', 'implementation_time', 'complexity']
+        }),
+        ('Tax Information', {
+            'fields': ['tax_impact_usa', 'tax_impact_brazil', 'tax_impact_others'],
+            'classes': ['collapse']
+        }),
+        ('Privacy & Protection', {
+            'fields': ['confidentiality_level', 'asset_protection', 'privacy_impact', 'privacy_score'],
+            'classes': ['collapse']
+        }),
+        ('Banking & Compliance', {
+            'fields': ['banking_relation_score', 'compliance_score', 'banking_facility'],
+            'classes': ['collapse']
+        }),
+        ('Documentation', {
+            'fields': ['required_documentation', 'documents_url', 'required_forms_usa', 'required_forms_brazil'],
+            'classes': ['collapse']
+        }),
+        ('Status', {
+            'fields': ['active']
+        }),
+    ]
+    ordering = ['name']
 
 
 @admin.register(Structure)
 class StructureAdmin(admin.ModelAdmin):
     list_display = [
-        'nome', 'tax_classification', 'jurisdicao',
-        'custo_base', 'custo_manutencao', 'ativo'
+        'name', 'status', 'get_entities_count', 'created_at'
     ]
-    list_filter = ['tax_classification', 'jurisdicao', 'ativo', 'created_at']
-    search_fields = ['nome', 'descricao']
+    list_filter = ['status', 'created_at']
+    search_fields = ['name', 'description']
     fieldsets = [
         ('Basic Information', {
-            'fields': ['nome', 'tax_classification', 'descricao']
+            'fields': ['name', 'description', 'status']
         }),
-        ('Jurisdiction', {
-            'fields': ['jurisdicao', 'estado_us', 'estado_br']
-        }),
-        ('Costs', {
-            'fields': ['custo_base', 'custo_manutencao']
-        }),
-        ('Scores', {
-            'fields': ['privacy_score', 'banking_relation_score']
-        }),
-        ('Templates', {
-            'fields': ['templates'],
-            'classes': ['collapse']
-        }),
-        ('Implementation', {
-            'fields': ['tempo_implementacao', 'documentos_necessarios']
-        }),
-        ('Status', {
-            'fields': ['ativo']
+        ('Calculated Fields', {
+            'fields': ['tax_impacts', 'severity_levels'],
+            'classes': ['collapse'],
+            'description': 'These fields are automatically calculated from validation rules'
         }),
     ]
-    ordering = ['nome']
+    ordering = ['-created_at']
+    
+    # Add custom CSS and JS for status colors
+    class Media:
+        css = {
+            'all': ('admin/css/structure_status_colors.css',)
+        }
+        js = ('admin/js/structure_status_colors.js',)
+
+    def get_entities_count(self, obj):
+        return obj.entity_ownerships.count()
+    get_entities_count.short_description = 'Entities'
 
 
-@admin.register(UBO)
-class UBOAdmin(admin.ModelAdmin):
+@admin.register(EntityOwnership)
+class EntityOwnershipAdmin(admin.ModelAdmin):
     list_display = [
-        'nome', 'tipo_pessoa', 'email', 'telefone', 'pais', 'ativo'
+        'structure', 'get_owner_name', 'owned_entity', 'ownership_percentage', 'owned_shares'
     ]
-    list_filter = ['tipo_pessoa', 'pais', 'ativo', 'created_at']
-    search_fields = ['nome', 'email', 'documento_identidade']
+    list_filter = ['structure', 'owned_entity', 'created_at']
+    search_fields = ['structure__name', 'owned_entity__name', 'corporate_name']
     fieldsets = [
         ('Basic Information', {
-            'fields': ['nome', 'tipo_pessoa']
+            'fields': ['structure', 'owned_entity']
         }),
-        ('Contact Information', {
-            'fields': ['email', 'telefone']
+        ('Owner', {
+            'fields': ['owner_ubo', 'owner_entity'],
+            'description': 'Select either UBO or Entity as owner (not both)'
         }),
-        ('Address Information', {
-            'fields': ['endereco', 'cidade', 'estado', 'pais', 'cep']
+        ('Corporate Identity', {
+            'fields': ['corporate_name', 'hash_number'],
+            'description': 'At least one of these fields must be filled'
         }),
-        ('Identification', {
-            'fields': ['documento_identidade', 'tipo_documento']
+        ('Ownership', {
+            'fields': ['owned_shares', 'ownership_percentage'],
+            'description': 'Fill either shares or percentage - the other will be calculated automatically'
         }),
-        ('Additional Information', {
-            'fields': ['nacionalidade', 'data_nascimento']
-        }),
-        ('Status', {
-            'fields': ['ativo']
+        ('Share Valuation', {
+            'fields': ['share_value_usd', 'share_value_eur', 'total_value_usd', 'total_value_eur'],
+            'classes': ['collapse'],
+            'description': 'Total values are calculated automatically'
         }),
     ]
-    ordering = ['nome']
+    ordering = ['structure', 'owned_entity']
+
+    def get_owner_name(self, obj):
+        if obj.owner_ubo:
+            return str(obj.owner_ubo)
+        elif obj.owner_entity:
+            return str(obj.owner_entity)
+        return "No owner"
+    get_owner_name.short_description = 'Owner'
 
 
 @admin.register(ValidationRule)
 class ValidationRuleAdmin(admin.ModelAdmin):
     list_display = [
-        'estrutura_a', 'estrutura_b', 'tipo_relacionamento', 
-        'severidade', 'ativo'
+        'parent_entity', 'related_entity', 'relationship_type', 'severity'
     ]
-    list_filter = [
-        'tipo_relacionamento', 'severidade', 'ativo', 'created_at'
-    ]
-    search_fields = [
-        'estrutura_a__nome', 'estrutura_b__nome', 'descricao'
-    ]
-    ordering = ['estrutura_a__nome', 'estrutura_b__nome']
-
-
-@admin.register(JurisdictionAlert)
-class JurisdictionAlertAdmin(admin.ModelAdmin):
-    list_display = [
-        'titulo', 'jurisdicao', 'tipo_alerta', 'deadline_type',
-        'next_deadline', 'prioridade', 'ativo'
-    ]
-    list_filter = [
-        'jurisdicao', 'tipo_alerta', 'deadline_type',
-        'prioridade', 'ativo', 'created_at'
-    ]
-    search_fields = ['titulo', 'descricao']
-    filter_horizontal = ['estruturas_aplicaveis']
-    ordering = ['-prioridade', 'next_deadline']
+    list_filter = ['relationship_type', 'severity', 'created_at']
+    search_fields = ['parent_entity__name', 'related_entity__name', 'description']
     fieldsets = [
-        ('Basic Information', {
-            'fields': ['titulo', 'descricao', 'jurisdicao', 'tipo_alerta']
+        ('Entities', {
+            'fields': ['parent_entity', 'related_entity']
         }),
-        ('Applicability', {
-            'fields': ['estruturas_aplicaveis']
+        ('Relationship', {
+            'fields': ['relationship_type', 'severity', 'description']
         }),
-        ('Service Connection', {
-            'fields': ['service_connection'],
-            'classes': ['collapse']
-        }),
-        ('Templates and Links', {
-            'fields': ['template_url', 'compliance_url'],
-            'classes': ['collapse']
-        }),
-        ('Deadline Configuration', {
-            'fields': [
-                'deadline_type', 'single_deadline', 'recurrence_pattern',
-                'next_deadline', 'last_completed'
-            ]
-        }),
-        ('Advanced Settings', {
-            'fields': [
-                'advance_notice_days', 'auto_calculate_next',
-                'custom_recurrence_config'
-            ],
-            'classes': ['collapse']
-        }),
-        ('Priority and Status', {
-            'fields': ['prioridade', 'ativo']
+        ('Tax Information', {
+            'fields': ['tax_impacts'],
+            'description': 'Detailed tax implications of this entity combination'
         }),
     ]
-
-
-@admin.register(Successor)
-class SuccessorAdmin(admin.ModelAdmin):
-    list_display = [
-        'ubo_proprietario', 'ubo_sucessor', 'percentual', 
-        'ativo', 'efetivado'
-    ]
-    list_filter = ['ativo', 'efetivado', 'created_at']
-    search_fields = [
-        'ubo_proprietario__nome', 'ubo_sucessor__nome'
-    ]
-    ordering = ['-percentual', 'data_definicao']
-
-
-@admin.register(StructureOwnership)
-class StructureOwnershipAdmin(admin.ModelAdmin):
-    list_display = ['parent', 'child', 'percentage', 'created_at']
-    list_filter = ['parent', 'child', 'created_at']
-    search_fields = ['parent__nome', 'child__nome']
-    ordering = ['parent__nome', 'child__nome']
-
-
+    ordering = ['parent_entity', 'related_entity']
 

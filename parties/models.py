@@ -308,6 +308,28 @@ class BeneficiaryRelation(models.Model):
         if total + self.percentage > 100:
             raise ValidationError("Total benefits cannot exceed 100%")
 
+    def save(self, *args, **kwargs):
+        """Auto-create beneficiary role when saving (FASE 7)"""
+        super().save(*args, **kwargs)
+        
+        # Automatically add role of beneficiary
+        beneficiary_role, created = PartyRole.objects.get_or_create(
+            party=self.beneficiary,
+            role_type='BENEFICIARY',
+            defaults={
+                'context': f'Beneficiary of {self.get_giver_name()}',
+                'active': True
+            }
+        )
+
+    def get_giver_name(self):
+        """Get name of the giver"""
+        if self.giver_party:
+            return self.giver_party.name
+        elif self.giver_entity:
+            return self.giver_entity.name
+        return "Unknown"
+
 
 class DocumentAttachment(models.Model):
     """
