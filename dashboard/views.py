@@ -260,3 +260,49 @@ def dashboard_api_view(request):
     
     return JsonResponse({'error': 'Invalid request'}, status=400)
 
+
+class PublicDashboardView(TemplateView):
+    """
+    Public dashboard view that doesn't require authentication
+    Shows basic system statistics
+    """
+    template_name = 'admin/dashboard/dashboard.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Basic public statistics
+        context['stats'] = {
+            'pending_requests': 0,  # Hide sensitive data for public view
+            'in_progress': Structure.objects.filter(status='DRAFTING').count(),
+            'pending_approvals': 0,  # Hide sensitive data for public view
+            'completed': Structure.objects.filter(status='APPROVED').count(),
+        }
+        
+        # Public structures (approved ones only)
+        context['structures_in_progress'] = Structure.objects.filter(
+            status__in=['APPROVED']
+        ).order_by('-created_at')[:5]
+        
+        # Empty for public view (no sensitive data)
+        context['pending_requests'] = []
+        context['pending_approvals'] = []
+        context['recent_activity'] = []
+        context['performance_metrics'] = self.get_public_performance_metrics()
+        
+        return context
+    
+    def get_public_performance_metrics(self):
+        """Get basic performance metrics for public view"""
+        total_structures = Structure.objects.count()
+        approved_structures = Structure.objects.filter(status='APPROVED').count()
+        
+        approval_rate = (approved_structures / total_structures * 100) if total_structures > 0 else 0
+        
+        return {
+            'total_structures': total_structures,
+            'approved_structures': approved_structures,
+            'approval_rate': approval_rate,
+            'entities_managed': Entity.objects.count(),
+        }
+

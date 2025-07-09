@@ -106,7 +106,7 @@ class StructureNodeAdmin(admin.ModelAdmin):
 @admin.register(NodeOwnership)
 class NodeOwnershipAdmin(admin.ModelAdmin):
     list_display = ['get_owner_name', 'owned_node', 'ownership_percentage', 'structure']
-    list_filter = ['structure', 'owned_node__entity_template']
+    list_filter = ['structure', 'owned_node__entity_template', 'owned_node__custom_name']
     search_fields = ['owned_node__custom_name', 'owner_party__name', 'owner_node__custom_name']
     
     def get_owner_name(self, obj):

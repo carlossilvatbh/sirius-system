@@ -149,3 +149,8 @@ RELATIONSHIP_WEBHOOK_URL = config('RELATIONSHIP_WEBHOOK_URL', default='http://lo
 WEBHOOK_TIMEOUT = config('WEBHOOK_TIMEOUT', default=10, cast=int)
 WEBHOOK_RETRIES = config('WEBHOOK_RETRIES', default=3, cast=int)
 
+# Authentication Configuration
+LOGIN_URL = '/admin/login/'
+LOGIN_REDIRECT_URL = '/admin/dashboard/'
+LOGOUT_REDIRECT_URL = '/admin/'
+
