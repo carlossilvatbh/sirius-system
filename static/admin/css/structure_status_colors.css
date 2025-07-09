@@ -1,61 +1,70 @@
-/* Structure Status Colors - FASE 8 */
+/* Structure Status Colors - Apple Design System */
 
-/* Drafting status - Yellow warning */
+/* Drafting status - Apple Orange */
 .structure-drafting {
-    background-color: #fff3cd !important;
-    border-left: 4px solid #ffc107 !important;
+    background-color: #FFF4E6 !important;
+    border-left: 4px solid #FF9500 !important;
 }
 
 .structure-drafting td {
-    background-color: #fff3cd !important;
+    background-color: #FFF4E6 !important;
 }
 
-/* Sent for Approval status - Blue info */
+/* Sent for Approval status - Apple Blue */
 .structure-sent-approval {
-    background-color: #d1ecf1 !important;
-    border-left: 4px solid #17a2b8 !important;
+    background-color: #E6F3FF !important;
+    border-left: 4px solid #007AFF !important;
 }
 
 .structure-sent-approval td {
-    background-color: #d1ecf1 !important;
+    background-color: #E6F3FF !important;
 }
 
-/* Approved status - Green success */
+/* Approved status - Apple Green */
 .structure-approved {
-    background-color: #d4edda !important;
-    border-left: 4px solid #28a745 !important;
+    background-color: #E8F5E8 !important;
+    border-left: 4px solid #34C759 !important;
 }
 
 .structure-approved td {
-    background-color: #d4edda !important;
+    background-color: #E8F5E8 !important;
 }
 
 /* Status field styling */
 .field-status {
-    font-weight: bold;
+    font-weight: 600;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
 }
 
 /* Alert for drafting structures */
 .structure-drafting .field-status::after {
     content: " ⚠️";
-    color: #856404;
+    color: #FF8800;
 }
 
 /* Info icon for sent for approval */
 .structure-sent-approval .field-status::after {
     content: " ℹ️";
-    color: #0c5460;
+    color: #0051D5;
 }
 
 /* Success icon for approved */
 .structure-approved .field-status::after {
     content: " ✅";
-    color: #155724;
+    color: #30A14E;
 }
 
-/* Hover effects */
+/* Hover effects with Apple colors */
 .structure-drafting:hover {
-    background-color: #ffeaa7 !important;
+    background-color: #FFF0D9 !important;
+}
+
+.structure-sent-approval:hover {
+    background-color: #D9EDFF !important;
+}
+
+.structure-approved:hover {
+    background-color: #DDF4DD !important;
 }
 
 .structure-sent-approval:hover {
