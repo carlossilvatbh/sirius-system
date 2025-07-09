@@ -15,6 +15,7 @@ from django.utils.html import format_html
 from django.urls import reverse
 from .models import Entity, Structure, EntityOwnership, ValidationRule, StructureNode, NodeOwnership
 
+
 # Basic admin registration with some improvements
 @admin.register(Entity)
 class EntityAdmin(admin.ModelAdmin):
@@ -41,6 +42,7 @@ class EntityAdmin(admin.ModelAdmin):
         }
         js = ('admin/js/structure_admin_improved.js',)
 
+
 @admin.register(Structure)
 class StructureAdmin(admin.ModelAdmin):
     list_display = ['name', 'status', 'created_at', 'view_structure_link']
@@ -58,17 +60,20 @@ class StructureAdmin(admin.ModelAdmin):
         }
         js = ('admin/js/structure_admin_improved.js',)
 
+
 @admin.register(EntityOwnership)
 class EntityOwnershipAdmin(admin.ModelAdmin):
     list_display = ['structure', 'owned_entity', 'ownership_percentage']
     list_filter = ['structure', 'owned_entity']
     search_fields = ['structure__name', 'owned_entity__name']
 
+
 @admin.register(ValidationRule)
 class ValidationRuleAdmin(admin.ModelAdmin):
     list_display = ['description', 'relationship_type', 'severity', 'active']
     list_filter = ['relationship_type', 'severity', 'active']
     search_fields = ['description', 'tax_impacts']
+
 
 @admin.register(StructureNode)
 class StructureNodeAdmin(admin.ModelAdmin):
@@ -97,6 +102,7 @@ class StructureNodeAdmin(admin.ModelAdmin):
         }),
     )
 
+
 @admin.register(NodeOwnership)
 class NodeOwnershipAdmin(admin.ModelAdmin):
     list_display = ['get_owner_name', 'owned_node', 'ownership_percentage', 'structure']
@@ -119,5 +125,6 @@ class NodeOwnershipAdmin(admin.ModelAdmin):
             'fields': ('ownership_percentage', 'owned_shares', 'share_value_usd')
         }),
     )
+
 
 print("📋 Admin básico carregado com CSS/JS melhorado")
