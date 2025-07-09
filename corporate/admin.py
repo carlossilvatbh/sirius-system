@@ -11,6 +11,8 @@
 
 # Use basic admin for now
 from django.contrib import admin
+from django.utils.html import format_html
+from django.urls import reverse
 from .models import Entity, Structure, EntityOwnership, ValidationRule, StructureNode, NodeOwnership
 
 # Basic admin registration with some improvements
@@ -20,6 +22,19 @@ class EntityAdmin(admin.ModelAdmin):
     list_filter = ['entity_type', 'jurisdiction', 'active']
     search_fields = ['name']
     
+    fieldsets = (
+        ('Informações Básicas', {
+            'fields': ('name', 'entity_type', 'jurisdiction', 'us_state', 'tax_classification')
+        }),
+        ('Configurações', {
+            'fields': ('complexity', 'banking_relation_score', 'active')
+        }),
+        ('Documentos e Requisitos', {
+            'fields': ('documents_and_requirements',),
+            'classes': ('collapse',)
+        }),
+    )
+    
     class Media:
         css = {
             'all': ('admin/css/structure_admin_improved.css',)
@@ -28,9 +43,14 @@ class EntityAdmin(admin.ModelAdmin):
 
 @admin.register(Structure)
 class StructureAdmin(admin.ModelAdmin):
-    list_display = ['name', 'status', 'created_at']
+    list_display = ['name', 'status', 'created_at', 'view_structure_link']
     list_filter = ['status', 'created_at']
     search_fields = ['name', 'description']
+    
+    def view_structure_link(self, obj):
+        url = reverse('corporate:structure_detail', args=[obj.pk])
+        return format_html('<a href="{}" target="_blank" style="color: #28a745; text-decoration: none;">🔍 Visualizar</a>', url)
+    view_structure_link.short_description = "Visualização"
     
     class Media:
         css = {
@@ -52,19 +72,24 @@ class ValidationRuleAdmin(admin.ModelAdmin):
 
 @admin.register(StructureNode)
 class StructureNodeAdmin(admin.ModelAdmin):
-    list_display = ['custom_name', 'entity_template', 'structure', 'level', 'is_active']
+    list_display = ['custom_name', 'entity_template', 'structure', 'level', 'is_active', 'view_structure_link']
     list_filter = ['structure', 'entity_template', 'level', 'is_active']
     search_fields = ['custom_name', 'entity_template__name', 'structure__name']
     ordering = ['structure', 'level', 'custom_name']
     
+    def view_structure_link(self, obj):
+        url = reverse('corporate:structure_detail', args=[obj.structure.pk])
+        return format_html('<a href="{}" target="_blank" style="color: #28a745; text-decoration: none;">🔍 Ver Estrutura</a>', url)
+    view_structure_link.short_description = "Visualização"
+    
     fieldsets = (
-        ('Basic Information', {
+        ('Informações Básicas', {
             'fields': ('structure', 'entity_template', 'custom_name')
         }),
-        ('Instance Configuration', {
+        ('Configuração da Instância', {
             'fields': ('total_shares', 'corporate_name', 'hash_number')
         }),
-        ('Hierarchy', {
+        ('Hierarquia', {
             'fields': ('parent_node', 'level')
         }),
         ('Status', {
@@ -84,13 +109,13 @@ class NodeOwnershipAdmin(admin.ModelAdmin):
         elif obj.owner_node:
             return f"🏢 {obj.owner_node.custom_name}"
         return "Unknown"
-    get_owner_name.short_description = "Owner"
+    get_owner_name.short_description = "Proprietário"
     
     fieldsets = (
-        ('Ownership Relationship', {
+        ('Relacionamento de Propriedade', {
             'fields': ('structure', 'owner_party', 'owner_node', 'owned_node')
         }),
-        ('Ownership Details', {
+        ('Detalhes da Propriedade', {
             'fields': ('ownership_percentage', 'owned_shares', 'share_value_usd')
         }),
     )

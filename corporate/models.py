@@ -247,8 +247,8 @@ class Entity(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Entity"
-        verbose_name_plural = "Entities"
+        verbose_name = "Entidade Corporativa"
+        verbose_name_plural = "Entidades Corporativas"
         ordering = ["name"]
         indexes = [
             models.Index(fields=["jurisdiction"]),
@@ -354,8 +354,8 @@ class Structure(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Structure"
-        verbose_name_plural = "Structures"
+        verbose_name = "Estrutura Corporativa"
+        verbose_name_plural = "Estruturas Corporativas"
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["status"]),
@@ -1330,8 +1330,8 @@ class StructureNode(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        verbose_name = "Structure Node"
-        verbose_name_plural = "Structure Nodes"
+        verbose_name = "Entidade na Estrutura"
+        verbose_name_plural = "Entidades nas Estruturas"
         unique_together = ['structure', 'custom_name']
         indexes = [
             models.Index(fields=['structure', 'level']),
@@ -1453,8 +1453,8 @@ class NodeOwnership(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        verbose_name = "Node Ownership"
-        verbose_name_plural = "Node Ownerships"
+        verbose_name = "Relacionamento de Propriedade"
+        verbose_name_plural = "Relacionamentos de Propriedade"
         unique_together = ['structure', 'owner_party', 'owner_node', 'owned_node']
         indexes = [
             models.Index(fields=['structure']),

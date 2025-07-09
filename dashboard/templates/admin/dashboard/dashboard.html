@@ -63,6 +63,51 @@
         </div>
     </div>
 
+    <!-- Quick Actions -->
+    <div class="quick-actions-section">
+        <div class="section-header">
+            <h2><i class="fas fa-rocket"></i> Quick Actions</h2>
+        </div>
+        <div class="actions-grid">
+            <a href="{% url 'corporate:structure_list' %}" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-sitemap"></i>
+                </div>
+                <div class="action-content">
+                    <h4>Visualizar Estruturas</h4>
+                    <p>Veja todas as estruturas corporativas com visualização hierárquica</p>
+                </div>
+            </a>
+            <a href="/admin/corporate/structure/add/" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-plus-circle"></i>
+                </div>
+                <div class="action-content">
+                    <h4>Nova Estrutura</h4>
+                    <p>Criar uma nova estrutura corporativa</p>
+                </div>
+            </a>
+            <a href="/admin/corporate/structurenode/" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-building"></i>
+                </div>
+                <div class="action-content">
+                    <h4>Gerenciar Nós</h4>
+                    <p>Administrar entidades nas estruturas</p>
+                </div>
+            </a>
+            <a href="/admin/corporate/nodeownership/" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-share-alt"></i>
+                </div>
+                <div class="action-content">
+                    <h4>Propriedades</h4>
+                    <p>Configurar relacionamentos de propriedade</p>
+                </div>
+            </a>
+        </div>
+    </div>
+
     <!-- Performance Metrics -->
     <div class="metrics-section">
         <div class="section-header">
